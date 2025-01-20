@@ -119,6 +119,7 @@ struct ReviewView: View {
                                     segment: segment,
                                     audioPlayer: audioPlayer,
                                     settings: settings,
+                                    reviewState: reviewState,  // Add this line
                                     audioURL: audioURL
                                 ) { response in
                                     handleResponse(for: segment, response: response)

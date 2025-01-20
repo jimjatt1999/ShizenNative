@@ -128,6 +128,7 @@ struct FocusMode: View {
                         segment: segments[currentIndex],
                         audioPlayer: audioPlayer,
                         settings: settings,
+                        reviewState: reviewState,
                         audioURL: audioURL,
                         onResponse: { response in
                             handleResponse(response)

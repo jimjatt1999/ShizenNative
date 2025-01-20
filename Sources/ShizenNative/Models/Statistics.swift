@@ -1,186 +1,168 @@
 import Foundation
 
-struct CurrentStats {
-    var reviews: Int = 0
-    var newCards: Int = 0
-    var accuracy: Double = 0
-    var distribution: (again: Int, hard: Int, good: Int, easy: Int, total: Int) = (0, 0, 0, 0, 0)
-    var totalStudyTime: TimeInterval = 0
-    var averageSessionTime: TimeInterval = 0
-    var longestSession: TimeInterval = 0
-    var totalSessions: Int = 0
-    var studyTimeData: [(hour: Int, duration: TimeInterval)] = []
-}
-
-struct StudySession: Codable {
-    var date: Date
-    var duration: TimeInterval
-    var reviews: Int
-    var newCards: Int
-    var responses: [String: Int]
+@MainActor
+final class StatisticsManager: ObservableObject {
+    static let shared = StatisticsManager()
+    private let statsKey = "userStatistics"
     
-    init(date: Date, duration: TimeInterval = 0, reviews: Int = 0, newCards: Int = 0, responses: [String: Int] = [:]) {
-        self.date = date
-        self.duration = duration
-        self.reviews = reviews
-        self.newCards = newCards
-        self.responses = responses
-    }
-}
-
-struct Statistics: Codable {
-    var currentStreak: Int = 0
-    var longestStreak: Int = 0
-    var lastReviewDate: Date?
-    var studySessions: [StudySession] = []
+    @Published private(set) var totalReviews: Int = 0
+    @Published private(set) var currentStreak: Int = 0
+    @Published private(set) var accuracy: Double = 0.0
+    @Published private(set) var newCards: Int = 0
+    @Published private(set) var studyTime: TimeInterval = 0
+    @Published private(set) var responseDistribution: [String: Int] = [
+        "again": 0,
+        "hard": 0,
+        "good": 0,
+        "easy": 0
+    ]
     
-    mutating func recordSession(_ session: StudySession) {
-        studySessions.append(session)
-        updateStreak(date: session.date)
+    private var lastReviewDate: Date?
+    private var sessionStartTime: Date?
+    private var timer: Timer?
+    
+    private init() {
+        print("[Stats] Initializing singleton")
+        loadStats()
+        setupNotifications()
+        startSession()
     }
     
-    private mutating func updateStreak(date: Date) {
+    private func setupNotifications() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.handleReviewNotification(_:)),
+                name: .reviewCompleted,
+                object: nil
+            )
+        }
+    }
+    
+    @objc private func handleReviewNotification(_ notification: Notification) {
+        Task { @MainActor in
+            guard let response = notification.userInfo?["response"] as? String,
+                  let isNewCard = notification.userInfo?["isNewCard"] as? Bool else {
+                print("[Stats] Invalid notification data")
+                return
+            }
+            
+            print("[Stats] Processing review: \(response)")
+            await processReview(response: response, isNewCard: isNewCard)
+        }
+    }
+    
+    private func processReview(response: String, isNewCard: Bool) async {
+        totalReviews += 1
+        
+        if isNewCard {
+            newCards += 1
+        }
+        
+        responseDistribution[response, default: 0] += 1
+        
+        let totalResponses = responseDistribution.values.reduce(0, +)
+        let correctResponses = (responseDistribution["good"] ?? 0) + (responseDistribution["easy"] ?? 0)
+        accuracy = totalResponses > 0 ? (Double(correctResponses) / Double(totalResponses)) * 100 : 0
+        
+        updateStreak()
+        saveStats()
+        objectWillChange.send()
+    }
+    
+    private func startSession() {
+        sessionStartTime = Date()
+        
+        DispatchQueue.main.async {
+            self.timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.updateStudyTime()
+                }
+            }
+        }
+    }
+    
+    private func updateStudyTime() {
+        if let startTime = sessionStartTime {
+            studyTime = Date().timeIntervalSince(startTime)
+            saveStats()
+            objectWillChange.send()
+        }
+    }
+    
+    private func updateStreak() {
         let calendar = Calendar.current
-        if let last = lastReviewDate {
-            if calendar.isDate(last, inSameDayAs: date) {
-                // Same day, streak continues
-            } else if calendar.isDate(last, equalTo: calendar.date(byAdding: .day, value: -1, to: date)!, toGranularity: .day) {
-                // Yesterday, streak continues
+        let today = Date()
+        
+        if let lastDate = lastReviewDate {
+            if calendar.isDate(lastDate, inSameDayAs: today) {
+                print("[Stats] Same day review")
+            } else if calendar.isDate(lastDate, equalTo: calendar.date(byAdding: .day, value: -1, to: today)!, toGranularity: .day) {
                 currentStreak += 1
-                longestStreak = max(longestStreak, currentStreak)
+                print("[Stats] Streak increased: \(currentStreak)")
             } else {
-                // Streak broken
                 currentStreak = 1
+                print("[Stats] Streak reset")
             }
         } else {
             currentStreak = 1
+            print("[Stats] First review")
         }
-        lastReviewDate = date
-    }
-}
-
-class StatisticsManager: ObservableObject {
-    @Published private(set) var stats: Statistics
-    @Published private(set) var currentStats = CurrentStats()
-    private var currentSession: StudySession?
-    
-    init() {
-        if let data = UserDefaults.standard.data(forKey: "statistics"),
-           let loadedStats = try? JSONDecoder().decode(Statistics.self, from: data) {
-            self.stats = loadedStats
-        } else {
-            self.stats = Statistics()
-        }
+        
+        lastReviewDate = today
     }
     
-    func updateStats(for timeRange: StatsView.TimeRange) {
-        let calendar = Calendar.current
-        let now = Date()
+    private func saveStats() {
+        let stats: [String: Any] = [
+            "totalReviews": totalReviews,
+            "currentStreak": currentStreak,
+            "accuracy": accuracy,
+            "newCards": newCards,
+            "studyTime": studyTime,
+            "responseDistribution": responseDistribution,
+            "lastReviewDate": lastReviewDate ?? Date()
+        ]
         
-        let filteredSessions: [StudySession]
-        switch timeRange {
-        case .day:
-            filteredSessions = stats.studySessions.filter {
-                calendar.isDate($0.date, inSameDayAs: now)
-            }
-        case .week:
-            let weekAgo = calendar.date(byAdding: .day, value: -7, to: now)!
-            filteredSessions = stats.studySessions.filter {
-                $0.date >= weekAgo
-            }
-        case .month:
-            let monthAgo = calendar.date(byAdding: .month, value: -1, to: now)!
-            filteredSessions = stats.studySessions.filter {
-                $0.date >= monthAgo
-            }
-        case .allTime:
-            filteredSessions = stats.studySessions
-        }
-        
-        calculateCurrentStats(from: filteredSessions)
+        UserDefaults.standard.set(stats, forKey: statsKey)
+        UserDefaults.standard.synchronize()
     }
     
-    private func calculateCurrentStats(from sessions: [StudySession]) {
-        var stats = CurrentStats()
-        
-        // Calculate totals
-        stats.reviews = sessions.reduce(0) { $0 + $1.reviews }
-        stats.newCards = sessions.reduce(0) { $0 + $1.newCards }
-        stats.totalStudyTime = sessions.reduce(0) { $0 + $1.duration }
-        stats.totalSessions = sessions.count
-        
-        // Calculate averages
-        stats.averageSessionTime = stats.totalStudyTime / Double(max(1, stats.totalSessions))
-        stats.longestSession = sessions.map(\.duration).max() ?? 0
-        
-        // Calculate response distribution
-        var responses = [String: Int]()
-        sessions.forEach { session in
-            session.responses.forEach { response in
-                responses[response.key, default: 0] += response.value
-            }
+    private func loadStats() {
+        guard let stats = UserDefaults.standard.dictionary(forKey: statsKey) else {
+            print("[Stats] No saved stats found")
+            return
         }
         
-        let total = responses.values.reduce(0, +)
-        stats.distribution = (
-            again: responses["again"] ?? 0,
-            hard: responses["hard"] ?? 0,
-            good: responses["good"] ?? 0,
-            easy: responses["easy"] ?? 0,
-            total: total
-        )
-        
-        // Calculate accuracy
-        let correct = (responses["good"] ?? 0) + (responses["easy"] ?? 0)
-        stats.accuracy = total > 0 ? (Double(correct) / Double(total)) * 100 : 0
-        
-        // Calculate study time data
-        var hourlyData: [Int: TimeInterval] = [:]
-        sessions.forEach { session in
-            let hour = Calendar.current.component(.hour, from: session.date)
-            hourlyData[hour, default: 0] += session.duration
-        }
-        
-        stats.studyTimeData = (0..<24).map { hour in
-            (hour: hour, duration: hourlyData[hour] ?? 0)
-        }
-        
-        currentStats = stats
+        totalReviews = stats["totalReviews"] as? Int ?? 0
+        currentStreak = stats["currentStreak"] as? Int ?? 0
+        accuracy = stats["accuracy"] as? Double ?? 0
+        newCards = stats["newCards"] as? Int ?? 0
+        studyTime = stats["studyTime"] as? TimeInterval ?? 0
+        responseDistribution = stats["responseDistribution"] as? [String: Int] ?? [:]
+        lastReviewDate = stats["lastReviewDate"] as? Date
     }
     
-    func beginSession() {
-        currentSession = StudySession(date: Date())
-    }
-    
-    func endSession(duration: TimeInterval) {
-        guard var session = currentSession else { return }
-        session.duration = duration
-        stats.recordSession(session)
-        save()
-        currentSession = nil
-    }
-    
-    func recordReview(response: String, isNewCard: Bool = false) {
-        if currentSession == nil {
-            beginSession()
-        }
+    func resetStats() async {
+        // Simulate some async work
+        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
         
-        if var session = currentSession {
-            session.reviews += 1
-            if isNewCard {
-                session.newCards += 1
-            }
-            var responses = session.responses
-            responses[response, default: 0] += 1
-            session.responses = responses
-            currentSession = session
-        }
+        totalReviews = 0
+        currentStreak = 0
+        accuracy = 0
+        newCards = 0
+        studyTime = 0
+        responseDistribution = ["again": 0, "hard": 0, "good": 0, "easy": 0]
+        lastReviewDate = nil
+        sessionStartTime = Date()
+        
+        saveStats()
+        objectWillChange.send()
+        
+        print("[Stats] Reset complete")
     }
     
-    private func save() {
-        if let encoded = try? JSONEncoder().encode(stats) {
-            UserDefaults.standard.set(encoded, forKey: "statistics")
-            UserDefaults.standard.synchronize()
-        }
+    deinit {
+        timer?.invalidate()
+        print("[Stats] Deinit")
     }
 }

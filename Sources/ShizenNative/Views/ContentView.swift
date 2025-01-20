@@ -58,7 +58,8 @@ struct ContentView: View {
                     destination: ManageView(
                         audioPlayer: audioPlayer,
                         segments: $segments,
-                        audioFiles: $audioFiles
+                        audioFiles: $audioFiles,
+                        reviewState: reviewState
                     ),
                     tag: "Manage",
                     selection: $selectedView
@@ -68,7 +69,7 @@ struct ContentView: View {
                 }
                 
                 NavigationLink(
-                    destination: StatsView(),
+                    destination: StatsView(reviewState: reviewState),
                     tag: "Stats",
                     selection: $selectedView
                 ) {
@@ -110,10 +111,11 @@ struct ContentView: View {
                     ManageView(
                         audioPlayer: audioPlayer,
                         segments: $segments,
-                        audioFiles: $audioFiles
+                        audioFiles: $audioFiles,
+                        reviewState: reviewState
                     )
                 } else if selectedView == "Stats" {
-                    StatsView()
+                    StatsView(reviewState: reviewState)
                 } else if selectedView == "Settings" {
                     SettingsView()
                 }

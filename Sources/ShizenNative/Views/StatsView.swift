@@ -1,138 +1,160 @@
 import SwiftUI
 
 struct StatsView: View {
-    @StateObject private var statsManager = StatisticsManager()
-    @State private var selectedTimeRange = TimeRange.day
-    
-    enum TimeRange: String, CaseIterable {
-        case day = "Today"
-        case week = "This Week"
-        case month = "This Month"
-        case allTime = "All Time"
-    }
+    @StateObject private var stats = StatisticsManager.shared
+    @ObservedObject var reviewState: ReviewState
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 25) {
-                // Time range selector
-                HStack {
-                    Text("Time Range")
-                        .foregroundColor(.secondary)
-                    
-                    Picker("", selection: $selectedTimeRange) {
-                        ForEach(TimeRange.allCases, id: \.self) { range in
-                            Text(range.rawValue).tag(range)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: selectedTimeRange) { _ in
-                        statsManager.updateStats(for: selectedTimeRange)
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Main stats
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 20) {
+            VStack(spacing: 20) {
+                // Stats Grid
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
                     StatBox(
                         title: "Reviews",
-                        value: "\(statsManager.currentStats.reviews)",
+                        value: "\(stats.totalReviews)",
                         icon: "clock.fill",
                         color: .blue
                     )
                     
                     StatBox(
-                        title: "Streak",
-                        value: "\(statsManager.stats.currentStreak) days",
+                        title: "Current Streak",
+                        value: "\(stats.currentStreak) days",
                         icon: "flame.fill",
                         color: .orange
                     )
                     
                     StatBox(
                         title: "Accuracy",
-                        value: String(format: "%.1f%%", statsManager.currentStats.accuracy),
+                        value: String(format: "%.1f%%", stats.accuracy),
                         icon: "checkmark.circle.fill",
                         color: .green
                     )
                     
                     StatBox(
                         title: "New Cards",
-                        value: "\(statsManager.currentStats.newCards)",
+                        value: "\(stats.newCards)",
                         icon: "star.fill",
                         color: .purple
                     )
                 }
                 .padding()
                 
-                // Response distribution
-                VStack(alignment: .leading, spacing: 15) {
+                // Response Distribution
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Response Distribution")
                         .font(.headline)
+                        .padding(.bottom, 5)
                     
-                    let distribution = statsManager.currentStats.distribution
-                    ResponseBar(label: "Again", count: distribution.again, total: distribution.total, color: .red)
-                    ResponseBar(label: "Hard", count: distribution.hard, total: distribution.total, color: .orange)
-                    ResponseBar(label: "Good", count: distribution.good, total: distribution.total, color: .green)
-                    ResponseBar(label: "Easy", count: distribution.easy, total: distribution.total, color: .blue)
+                    ForEach(["again", "hard", "good", "easy"], id: \.self) { response in
+                        ResponseBar(
+                            label: response.capitalized,
+                            count: stats.responseDistribution[response] ?? 0,
+                            total: stats.totalReviews,
+                            color: responseColor(for: response)
+                        )
+                    }
                 }
                 .padding()
                 .background(Color(.windowBackgroundColor))
                 .cornerRadius(10)
-                .padding(.horizontal)
                 
-                // Study time
-                VStack(alignment: .leading, spacing: 15) {
-                    HStack {
-                        Text("Study Time")
-                            .font(.headline)
-                        Spacer()
-                        Text(formatStudyTime(statsManager.currentStats.totalStudyTime))
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    // Study time chart
-                    StudyTimeChart(data: statsManager.currentStats.studyTimeData)
-                        .frame(height: 200)
-                    
-                    // Time details
-                    VStack(alignment: .leading, spacing: 8) {
-                        TimeDetailRow(
-                            label: "Average Session",
-                            value: formatStudyTime(statsManager.currentStats.averageSessionTime)
-                        )
-                        TimeDetailRow(
-                            label: "Longest Session",
-                            value: formatStudyTime(statsManager.currentStats.longestSession)
-                        )
-                        TimeDetailRow(
-                            label: "Total Sessions",
-                            value: "\(statsManager.currentStats.totalSessions)"
-                        )
-                    }
-                    .padding(.top, 10)
+                // Study Time
+                VStack(alignment: .leading) {
+                    Text("Study Time")
+                        .font(.headline)
+                    Text(formatTime(stats.studyTime))
+                        .font(.title2)
+                        .foregroundColor(.blue)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
                 .background(Color(.windowBackgroundColor))
                 .cornerRadius(10)
-                .padding(.horizontal)
             }
-            .padding(.vertical)
+            .padding()
         }
         .navigationTitle("Statistics")
-        .onAppear {
-            statsManager.updateStats(for: selectedTimeRange)
+    }
+    
+    private func responseColor(for response: String) -> Color {
+        switch response {
+        case "again": return .red
+        case "hard": return .orange
+        case "good": return .green
+        case "easy": return .blue
+        default: return .gray
         }
     }
     
-    private func formatStudyTime(_ seconds: TimeInterval) -> String {
+    private func formatTime(_ seconds: TimeInterval) -> String {
         let hours = Int(seconds) / 3600
-        let minutes = (Int(seconds) % 3600) / 60
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
+        let minutes = Int(seconds) / 60 % 60
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+    }
+}
+
+struct StatBox: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+            Text(title)
+                .foregroundColor(.secondary)
+                .font(.caption)
+            Text(value)
+                .font(.title2.bold())
+                .foregroundColor(color)
         }
-        return "\(minutes)m"
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(.windowBackgroundColor))
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+struct ResponseBar: View {
+    let label: String
+    let count: Int
+    let total: Int
+    let color: Color
+    
+    var percentage: Double {
+        guard total > 0 else { return 0 }
+        return Double(count) / Double(total)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(count)")
+                    .foregroundColor(color)
+            }
+            .font(.caption)
+            
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                    Rectangle()
+                        .fill(color)
+                        .frame(width: geometry.size.width * CGFloat(percentage))
+                }
+            }
+            .frame(height: 8)
+            .cornerRadius(4)
+        }
     }
 }
 
@@ -179,4 +201,8 @@ struct TimeDetailRow: View {
         }
         .font(.subheadline)
     }
+}
+
+#Preview {
+    StatsView(reviewState: ReviewState(settings: AppSettings()))
 }

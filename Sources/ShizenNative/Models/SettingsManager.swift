@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 class SettingsManager {
     static let shared = SettingsManager()
     
@@ -11,7 +12,9 @@ class SettingsManager {
     
     private init() {}
     
-    func resetAll() {
+    func resetAll() async {
+        print("[Settings] Resetting all settings and progress")
+        
         // Reset settings
         UserDefaults.standard.removeObject(forKey: settingsKey)
         
@@ -22,6 +25,7 @@ class SettingsManager {
         
         // Reset statistics
         UserDefaults.standard.removeObject(forKey: statisticsKey)
+        await StatisticsManager.shared.resetStats()
         
         // Synchronize changes
         UserDefaults.standard.synchronize()
@@ -32,7 +36,9 @@ class SettingsManager {
         NotificationCenter.default.post(name: .statisticsReset, object: nil)
     }
     
-    func resetProgress() {
+    func resetProgress() async {
+        print("[Settings] Resetting progress and statistics")
+        
         // Reset SRS progress
         UserDefaults.standard.removeObject(forKey: reviewCardsKey)
         UserDefaults.standard.removeObject(forKey: todayNewCardsKey)
@@ -40,6 +46,7 @@ class SettingsManager {
         
         // Reset statistics
         UserDefaults.standard.removeObject(forKey: statisticsKey)
+        await StatisticsManager.shared.resetStats()
         
         // Synchronize changes
         UserDefaults.standard.synchronize()
@@ -48,27 +55,4 @@ class SettingsManager {
         NotificationCenter.default.post(name: .reviewProgressReset, object: nil)
         NotificationCenter.default.post(name: .statisticsReset, object: nil)
     }
-    
-    func exportSettings() -> Data? {
-        let settings = UserDefaults.standard.dictionaryRepresentation()
-        return try? JSONSerialization.data(withJSONObject: settings, options: .prettyPrinted)
-    }
-    
-    func importSettings(from data: Data) throws {
-        guard let settings = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw SettingsError.invalidData
-        }
-        
-        for (key, value) in settings {
-            UserDefaults.standard.set(value, forKey: key)
-        }
-        
-        UserDefaults.standard.synchronize()
-        NotificationCenter.default.post(name: .settingsChanged, object: nil)
-    }
-}
-
-enum SettingsError: Error {
-    case invalidData
-    case importFailed
 }

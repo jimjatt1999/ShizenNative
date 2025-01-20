@@ -8,4 +8,5 @@ extension Notification.Name {
     static let statisticsReset = Notification.Name("statisticsReset")
     static let settingsApplied = Notification.Name("settingsApplied")
     static let settingsReset = Notification.Name("settingsReset")
+    static let reviewCompleted = Notification.Name("reviewCompleted")
 }

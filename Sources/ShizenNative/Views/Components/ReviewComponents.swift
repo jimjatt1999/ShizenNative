@@ -4,35 +4,51 @@ struct ReviewCard: View {
     let segment: Segment
     @ObservedObject var audioPlayer: AudioPlayer
     @ObservedObject var settings: AppSettings
+    @ObservedObject var reviewState: ReviewState
     let audioURL: URL
     let onResponse: (String) -> Void
     
     @State private var showTranscript: Bool
-    @State private var playbackSpeed: Float = 1.0
     @State private var showAIAnalysis = false
     
-    private let availableSpeeds: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
-    
-    init(segment: Segment, audioPlayer: AudioPlayer, settings: AppSettings, audioURL: URL, onResponse: @escaping (String) -> Void) {
+    init(segment: Segment, audioPlayer: AudioPlayer, settings: AppSettings, reviewState: ReviewState, audioURL: URL, onResponse: @escaping (String) -> Void) {
         self.segment = segment
         self.audioPlayer = audioPlayer
         self.settings = settings
+        self.reviewState = reviewState
         self.audioURL = audioURL
         self.onResponse = onResponse
         _showTranscript = State(initialValue: settings.settings.showTranscriptsByDefault)
-        
-        // Debug print to verify segment data
-        print("Initializing ReviewCard for segment:")
-        print("ID: \(segment.id)")
-        print("Text: \(segment.text)")
-        print("Start: \(segment.start)")
-        print("End: \(segment.end)")
-        print("Source: \(segment.sourceId)")
-        print("Audio URL: \(audioURL.path)")
     }
     
-    private var isThisCardPlaying: Bool {
+    var isPlaying: Bool {
         audioPlayer.isPlaying && audioPlayer.currentSegmentId == segment.id.uuidString
+    }
+    
+    private func handleResponse(_ response: String) {
+        print("[Review] Handling response: \(response)")
+        
+        // Stop any playing audio
+        audioPlayer.stop()
+        
+        // Get the current card state
+        let segmentId = segment.id.uuidString
+        let isNewCard = reviewState.reviewCards[segmentId] == nil
+        
+        print("[Review] Sending notification - Response: \(response), New Card: \(isNewCard)")
+        
+        // Post notification for statistics
+        NotificationCenter.default.post(
+            name: .reviewCompleted,
+            object: nil,
+            userInfo: [
+                "response": response,
+                "isNewCard": isNewCard
+            ]
+        )
+        
+        // Call the response handler
+        onResponse(response)
     }
     
     var body: some View {
@@ -93,52 +109,23 @@ struct ReviewCard: View {
             VStack(spacing: 0) {
                 HStack(spacing: 15) {
                     Button(action: {
-                        if isThisCardPlaying {
+                        if isPlaying {
                             audioPlayer.pause()
                         } else {
-                            // Stop any other playing audio first
                             audioPlayer.stop()
-                            // Load the correct audio file
                             audioPlayer.load(url: audioURL)
-                            // Then play this segment
                             audioPlayer.playSegment(segment: segment)
                         }
                     }) {
-                        Image(systemName: isThisCardPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .resizable()
                             .frame(width: 30, height: 30)
                             .foregroundColor(.blue)
                     }
                     .buttonStyle(.plain)
                     
-                    // Waveform with integrated speed control
-                    HStack(spacing: 0) {
-                        WaveformView(audioPlayer: audioPlayer, segment: segment)
-                            .frame(height: 40)
-                        
-                        // Speed control
-                        Menu {
-                            ForEach(availableSpeeds, id: \.self) { speed in
-                                Button(action: {
-                                    playbackSpeed = speed
-                                    audioPlayer.setPlaybackRate(speed)
-                                }) {
-                                    HStack {
-                                        Text("\(String(format: "%.2fx", speed))")
-                                        if speed == playbackSpeed {
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: playbackSpeed > 1.0 ? "forward.circle.fill" : "forward.circle")
-                                .foregroundColor(.secondary)
-                                .font(.system(size: 16))
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    WaveformView(audioPlayer: audioPlayer, segment: segment)
+                        .frame(height: 40)
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 10)
@@ -148,20 +135,16 @@ struct ReviewCard: View {
                 // Review buttons
                 HStack(spacing: 15) {
                     ReviewButton(title: "Again", color: .red) {
-                        audioPlayer.stop()
-                        onResponse("again")
+                        handleResponse("again")
                     }
                     ReviewButton(title: "Hard", color: .orange) {
-                        audioPlayer.stop()
-                        onResponse("hard")
+                        handleResponse("hard")
                     }
                     ReviewButton(title: "Good", color: .green) {
-                        audioPlayer.stop()
-                        onResponse("good")
+                        handleResponse("good")
                     }
                     ReviewButton(title: "Easy", color: .blue) {
-                        audioPlayer.stop()
-                        onResponse("easy")
+                        handleResponse("easy")
                     }
                 }
                 .padding(15)
@@ -176,8 +159,7 @@ struct ReviewCard: View {
         )
         .animation(.spring(), value: showAIAnalysis)
         .onDisappear {
-            // Stop playback if this card's audio is playing when the card disappears
-            if isThisCardPlaying {
+            if isPlaying {
                 audioPlayer.stop()
             }
         }

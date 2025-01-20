@@ -152,10 +152,13 @@ struct SettingsView: View {
                             .font(.headline)
                         
                         Button(action: {
-                            tempSettings = .default
-                            settings.resetToDefaults()
-                            forceRefresh()
-                            showFeedback("Settings have been restored to defaults")
+                            Task {
+                                await SettingsManager.shared.resetAll()
+                                tempSettings = .default
+                                settings.resetToDefaults()
+                                forceRefresh()
+                                showFeedback("Settings have been restored to defaults")
+                            }
                         }) {
                             HStack {
                                 Image(systemName: "arrow.counterclockwise.circle.fill")
@@ -177,6 +180,18 @@ struct SettingsView: View {
                             .frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.bordered)
+                        .alert("Reset Progress & Statistics", isPresented: $showingResetAlert) {
+                            Button("Cancel", role: .cancel) { }
+                            Button("Reset", role: .destructive) {
+                                Task {
+                                    await SettingsManager.shared.resetProgress()
+                                    forceRefresh()
+                                    showFeedback("Progress and statistics have been reset")
+                                }
+                            }
+                        } message: {
+                            Text("This will reset all review progress and statistics. This action cannot be undone.")
+                        }
                     }
                     .padding()
                 }
@@ -209,14 +224,6 @@ struct SettingsView: View {
             }
             .animation(.easeInOut, value: showingNotification)
         )
-        .alert("Reset Progress & Statistics", isPresented: $showingResetAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Reset", role: .destructive) {
-                resetSRSProgress()
-            }
-        } message: {
-            Text("This will reset all review progress and statistics. This action cannot be undone.")
-        }
         .alert("Apply Settings", isPresented: $showingConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Apply", role: .destructive) {
@@ -237,7 +244,6 @@ struct SettingsView: View {
         notificationMessage = message
         showingNotification = true
         
-        // Hide the notification after 2 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation {
                 showingNotification = false
@@ -275,27 +281,5 @@ struct SettingsView: View {
                 userInfo: ["hardRefresh": true]
             )
         }
-    }
-    
-    private func resetSRSProgress() {
-        // Reset SRS progress
-        UserDefaults.standard.removeObject(forKey: "reviewCards")
-        UserDefaults.standard.removeObject(forKey: "todayNewCards")
-        UserDefaults.standard.removeObject(forKey: "lastReviewDate")
-        
-        // Reset statistics
-        UserDefaults.standard.removeObject(forKey: "statistics")
-        
-        // Update UI
-        NotificationCenter.default.post(
-            name: .reviewProgressReset,
-            object: nil
-        )
-        
-        // Show feedback
-        showFeedback("Progress and statistics have been reset")
-        
-        // Force refresh views
-        forceRefresh()
     }
 }

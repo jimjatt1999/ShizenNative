@@ -3,9 +3,37 @@ import SwiftUI
 struct SegmentRow: View {
     let segment: Segment
     @ObservedObject var audioPlayer: AudioPlayer
-    @Binding var isPlaying: Bool
+    @ObservedObject var reviewState: ReviewState
+    var isPlaying: Bool
     var isCurrentSegment: Bool
     var isSelected: Bool
+    
+    // Computed properties for segment status
+    var reviewStatus: ReviewStatus {
+        let segmentId = segment.id.uuidString
+        if let card = reviewState.reviewCards[segmentId] {
+            if card.dueDate <= Date() {
+                return .due
+            } else {
+                return .scheduled(date: card.dueDate)
+            }
+        }
+        return .new
+    }
+    
+    var difficultyColor: Color {
+        let segmentId = segment.id.uuidString
+        if let card = reviewState.reviewCards[segmentId] {
+            switch card.ease {
+            case ..<1.5: return .red
+            case 1.5..<2.0: return .orange
+            case 2.0..<2.5: return .yellow
+            case 2.5..<3.0: return .green
+            default: return .blue
+            }
+        }
+        return .gray
+    }
     
     var body: some View {
         HStack {
@@ -37,6 +65,14 @@ struct SegmentRow: View {
                     .foregroundColor(isCurrentSegment ? .blue : .primary)
                 
                 HStack(spacing: 8) {
+                    // Review status badge
+                    ReviewStatusBadge(status: reviewStatus)
+                    
+                    // Difficulty indicator
+                    Circle()
+                        .fill(difficultyColor)
+                        .frame(width: 8, height: 8)
+                    
                     if segment.isDuplicate {
                         Text("Duplicate")
                             .font(.caption)
@@ -44,7 +80,7 @@ struct SegmentRow: View {
                     }
                     
                     if segment.isHiddenFromSRS {
-                        Text("Hidden from SRS")
+                        Text("Hidden")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -69,6 +105,34 @@ struct SegmentRow: View {
                 }
             }
         )
+        .contextMenu {
+            Button(action: {
+                // Toggle SRS visibility
+                var updatedSegment = segment
+                updatedSegment.isHiddenFromSRS.toggle()
+                // Notify parent to update segment
+            }) {
+                Label(segment.isHiddenFromSRS ? "Show in SRS" : "Hide from SRS", 
+                      systemImage: "eye")
+            }
+            
+            Menu("Tag Difficulty") {
+                ForEach(DifficultyTag.allCases, id: \.self) { tag in
+                    Button(action: {
+                        // Add difficulty tag
+                    }) {
+                        Label(tag.name, systemImage: "tag.fill")
+                            .foregroundColor(tag.color)
+                    }
+                }
+            }
+            
+            Button(action: {
+                // Add custom tag
+            }) {
+                Label("Add Tag...", systemImage: "tag.fill")
+            }
+        }
     }
     
     private func timeString(start: Double, end: Double) -> String {
@@ -77,5 +141,30 @@ struct SegmentRow: View {
         formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = .pad
         return "\(formatter.string(from: start) ?? "0:00") - \(formatter.string(from: end) ?? "0:00")"
+    }
+}
+
+enum DifficultyTag: CaseIterable {
+    case easy
+    case medium
+    case hard
+    case veryHard
+    
+    var name: String {
+        switch self {
+        case .easy: return "Easy"
+        case .medium: return "Medium"
+        case .hard: return "Hard"
+        case .veryHard: return "Very Hard"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .easy: return .green
+        case .medium: return .blue
+        case .hard: return .orange
+        case .veryHard: return .red
+        }
     }
 }
