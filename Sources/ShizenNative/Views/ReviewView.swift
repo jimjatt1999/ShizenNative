@@ -10,72 +10,101 @@ struct ReviewView: View {
     @State private var forceReload = false
     @State private var sessionStartTime: Date?
     
-    var visibleSegments: [Segment] {
-        // Filter out hidden segments first
-        let availableSegments = segments.filter { !$0.isHiddenFromSRS }
+    var reviewStats: (newCards: Int, dueReviews: Int) {
+        var newCount = 0
+        var dueCount = 0
         
-        // Always show the user-specified number of cards
-        let startIndex = reviewState.currentIndex
-        let maxCards = settings.settings.cardsPerFeed
-        let endIndex = min(startIndex + maxCards, availableSegments.count)
+        for segment in segments where !segment.isHiddenFromSRS {
+            let segmentId = segment.id.uuidString
+            if let card = reviewState.reviewCards[segmentId] {
+                if card.dueDate <= Date() {
+                    dueCount += 1
+                }
+            } else {
+                // Count as potential new card
+                newCount += 1
+            }
+        }
         
-        guard startIndex < availableSegments.count else { return [] }
-        
-        // Get the slice of segments
-        var segmentSlice = Array(availableSegments[startIndex..<endIndex])
-        
-        // Filter for due cards and new cards
-        segmentSlice = segmentSlice.filter { segment in
+        // Limit new cards by daily limit
+        newCount = min(newCount, settings.settings.newCardsPerDay - reviewState.todayNewCards)
+        return (newCount, dueCount)
+    }
+    
+    var reviewableSegments: [Segment] {
+        segments.filter { segment in
+            if segment.isHiddenFromSRS { return false }
+            
             let segmentId = segment.id.uuidString
             if let card = reviewState.reviewCards[segmentId] {
                 return card.dueDate <= Date()
             }
+            // Only include new cards if we haven't reached today's limit
             return reviewState.todayNewCards < settings.settings.newCardsPerDay
         }
+    }
+    
+    var visibleSegments: [Segment] {
+        let startIndex = reviewState.currentIndex
+        let maxCards = settings.settings.cardsPerFeed
+        let endIndex = min(startIndex + maxCards, reviewableSegments.count)
         
-        // If we have fewer cards than requested after filtering, try to get more
-        if segmentSlice.count < maxCards {
-            var additionalStartIndex = endIndex
-            while segmentSlice.count < maxCards && additionalStartIndex < availableSegments.count {
-                let segment = availableSegments[additionalStartIndex]
-                let segmentId = segment.id.uuidString
-                
-                if let card = reviewState.reviewCards[segmentId] {
-                    if card.dueDate <= Date() {
-                        segmentSlice.append(segment)
-                    }
-                } else if reviewState.todayNewCards < settings.settings.newCardsPerDay {
-                    segmentSlice.append(segment)
-                }
-                
-                additionalStartIndex += 1
-            }
-        }
-        
-        return segmentSlice
+        guard startIndex < reviewableSegments.count else { return [] }
+        return Array(reviewableSegments[startIndex..<endIndex])
+    }
+    
+    var progressText: String {
+        let stats = reviewStats
+        let totalToReview = stats.newCards + stats.dueReviews
+        let current = min(reviewState.currentIndex + 1, totalToReview)
+        return "\(current) of \(totalToReview)"
+    }
+    
+    var remainingCount: Int {
+        let stats = reviewStats
+        return max(0, stats.newCards + stats.dueReviews - reviewState.currentIndex)
     }
     
     var body: some View {
         VStack(spacing: 0) {
             // Progress header
             HStack {
-                let totalVisible = segments.filter { !$0.isHiddenFromSRS }.count
-                Text("\(reviewState.currentIndex + 1) of \(totalVisible)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Session Progress")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Text(progressText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 
                 Spacer()
                 
                 HStack(spacing: 15) {
-                    Label("\(reviewState.todayNewCards)/\(settings.settings.newCardsPerDay) New", 
-                          systemImage: "star.fill")
-                        .foregroundColor(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("New Cards Today")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Label("\(reviewState.todayNewCards)/\(settings.settings.newCardsPerDay)", 
+                              systemImage: "star.fill")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                    }
                     
-                    Label("\(totalVisible - reviewState.currentIndex) Left", 
-                          systemImage: "clock.fill")
-                        .foregroundColor(.orange)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Cards Remaining")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        HStack(spacing: 4) {
+                            Label("\(reviewStats.dueReviews)", systemImage: "clock.fill")
+                                .foregroundColor(.orange)
+                            Text("+")
+                            Label("\(reviewStats.newCards)", systemImage: "star.fill")
+                                .foregroundColor(.blue)
+                        }
+                        .font(.caption)
+                    }
                 }
-                .font(.caption)
             }
             .padding()
             
@@ -117,11 +146,21 @@ struct ReviewView: View {
         .onChange(of: forceReload) { _ in
             refreshID = UUID()
         }
+        .onAppear {
+            // Update current index if it's beyond available cards
+            if reviewState.currentIndex >= reviewableSegments.count {
+                reviewState.currentIndex = 0
+            }
+        }
     }
     
     private func refreshView() {
         audioPlayer.stop()
         withAnimation {
+            // Ensure current index is valid
+            if reviewState.currentIndex >= reviewableSegments.count {
+                reviewState.currentIndex = 0
+            }
             forceReload.toggle()
             refreshID = UUID()
         }
@@ -149,6 +188,12 @@ struct ReviewView: View {
         
         // Move to next card
         reviewState.currentIndex += 1
+        
+        // Reset index if we've reached the end
+        if reviewState.currentIndex >= reviewableSegments.count {
+            reviewState.currentIndex = 0
+        }
+        
         audioPlayer.stop()
         
         // Force refresh to update visible cards
