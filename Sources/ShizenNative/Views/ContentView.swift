@@ -79,39 +79,47 @@ struct ContentView: View {
                 }
             }
             .listStyle(SidebarListStyle())
-            .frame(minWidth: 200)
+            .frame(minWidth: 200, maxWidth: 300)
             .background(Color(NSColor.darkGray))
             
             // Main content
-            if selectedView == "Upload" {
-                UploadView(
-                    showingFilePicker: $showingFilePicker,
-                    isTranscribing: $isTranscribing,
-                    transcriptionProgress: $transcriptionProgress,
-                    onFileSelected: handleFileUpload
-                )
-            } else if selectedView == "Review" {
-                ReviewView(
-                    segments: segments,
-                    audioPlayer: audioPlayer,
-                    settings: settings,
-                    audioFiles: audioFiles
-                )
-            } else if selectedView == "Manage" {
-                ManageView(
-                    audioPlayer: audioPlayer,
-                    segments: $segments,
-                    audioFiles: $audioFiles
-                )
-            } else if selectedView == "Stats" {
-                StatsView()
-            } else if selectedView == "Settings" {
-                SettingsView()
+            Group {
+                if selectedView == "Upload" {
+                    UploadView(
+                        showingFilePicker: $showingFilePicker,
+                        isTranscribing: $isTranscribing,
+                        transcriptionProgress: $transcriptionProgress,
+                        onFileSelected: handleFileUpload
+                    )
+                } else if selectedView == "Review" {
+                    ReviewView(
+                        segments: segments,
+                        audioPlayer: audioPlayer,
+                        settings: settings,
+                        audioFiles: audioFiles
+                    )
+                } else if selectedView == "Manage" {
+                    ManageView(
+                        audioPlayer: audioPlayer,
+                        segments: $segments,
+                        audioFiles: $audioFiles
+                    )
+                } else if selectedView == "Stats" {
+                    StatsView()
+                } else if selectedView == "Settings" {
+                    SettingsView()
+                }
             }
         }
         .frame(minWidth: 800, minHeight: 600)
         .navigationTitle("Shizen")
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.left")
+                }
+            }
+            
             ToolbarItem(placement: .automatic) {
                 Button(action: {
                     showingFocusModeSelection = true
@@ -151,6 +159,10 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .exitFocusMode)) { _ in
             showingFocusModeSelection = false
         }
+    }
+    
+    private func toggleSidebar() {
+        NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
     }
     
     private func handleFileUpload(_ url: URL) {
