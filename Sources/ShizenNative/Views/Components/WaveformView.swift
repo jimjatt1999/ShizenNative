@@ -43,7 +43,7 @@ struct WaveformView: View {
                     .onEnded { value in
                         let progress = value.location.x / geometry.size.width
                         let time = segment.start + (segment.end - segment.start) * Double(progress)
-                        audioPlayer.playSegment(start: time, end: segment.end, segmentId: segment.id.uuidString)
+                        audioPlayer.playSegment(segment: segment)
                     }
             )
             .contentShape(Rectangle())

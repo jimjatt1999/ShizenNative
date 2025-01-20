@@ -42,7 +42,7 @@ struct PlaybackControlsView: View {
                 Button(action: {
                     if currentIndex > 0 {
                         currentIndex -= 1
-                        playSegment(segments[currentIndex])
+                        playCurrentSegment()
                     }
                 }) {
                     Image(systemName: "backward.fill")
@@ -55,8 +55,7 @@ struct PlaybackControlsView: View {
                         audioPlayer.pause()
                         isPlaying = false
                     } else {
-                        playSegment(segments[currentIndex])
-                        isPlaying = true
+                        playCurrentSegment()
                     }
                 }) {
                     Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
@@ -67,7 +66,7 @@ struct PlaybackControlsView: View {
                 Button(action: {
                     if currentIndex < segments.count - 1 {
                         currentIndex += 1
-                        playSegment(segments[currentIndex])
+                        playCurrentSegment()
                     }
                 }) {
                     Image(systemName: "forward.fill")
@@ -108,8 +107,16 @@ struct PlaybackControlsView: View {
         .padding(.bottom)
     }
     
-    private func playSegment(_ segment: Segment) {
-        audioPlayer.playSegment(segment: segment)
+    private func playCurrentSegment() {
+        let segment = segments[currentIndex]
+        audioPlayer.playSegment(segment: segment) { [self] in
+            if currentIndex < segments.count - 1 {
+                DispatchQueue.main.async {
+                    currentIndex += 1
+                    playCurrentSegment()
+                }
+            }
+        }
         isPlaying = true
     }
     

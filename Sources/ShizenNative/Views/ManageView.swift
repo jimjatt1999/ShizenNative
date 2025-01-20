@@ -245,7 +245,8 @@ struct SourceContentView: View {
                         currentPlayingIndex = 0
                         if let audioURL = audioFiles[sourceId] {
                             audioPlayer.load(url: audioURL)
-                            playSegment(segments[currentPlayingIndex])
+                            audioPlayer.setPlaybackRate(playbackSpeed)
+                            playCurrentSegment()
                         }
                     } else {
                         stopPlayback()
@@ -301,6 +302,36 @@ struct SourceContentView: View {
         } message: {
             Text("Are you sure you want to delete the selected segments? This action cannot be undone.")
         }
+        .onDisappear {
+            stopPlayback()
+        }
+    }
+    
+    private func playCurrentSegment() {
+        guard currentPlayingIndex < segments.count else {
+            stopPlayback()
+            return
+        }
+        
+        let segment = segments[currentPlayingIndex]
+        audioPlayer.playSegment(segment: segment) {
+            if isContinuousPlayback && currentPlayingIndex < segments.count - 1 {
+                DispatchQueue.main.async {
+                    currentPlayingIndex += 1
+                    playCurrentSegment()
+                }
+            } else {
+                isPlaying = false
+                isContinuousPlayback = false
+            }
+        }
+        isPlaying = true
+    }
+    
+    private func stopPlayback() {
+        audioPlayer.stop()
+        isPlaying = false
+        isContinuousPlayback = false
     }
     
     private func updateSelectedSegments(hideFromSRS: Bool) {
@@ -321,15 +352,5 @@ struct SourceContentView: View {
         onUpdateSegments(updatedSegments)
         selectedSegments.removeAll()
         isSelectionMode = false
-    }
-    
-    private func playSegment(_ segment: Segment) {
-        audioPlayer.playSegment(segment: segment)
-        isPlaying = true
-    }
-    
-    private func stopPlayback() {
-        audioPlayer.stop()
-        isPlaying = false
     }
 }

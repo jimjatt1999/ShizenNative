@@ -1,10 +1,10 @@
 import SwiftUI
-import AVFoundation
 
 struct ContentView: View {
     @StateObject private var audioPlayer = AudioPlayer()
     @StateObject private var transcriptionManager = TranscriptionManager()
     @StateObject private var settings = AppSettings()
+    @StateObject private var reviewState: ReviewState
     @State private var showingFilePicker = false
     @State private var segments: [Segment] = []
     @State private var selectedView: String? = "Review"
@@ -15,6 +15,12 @@ struct ContentView: View {
     @State private var showingFocusModeSelection = false
     @State private var audioFiles: [String: URL] = [:]
     
+    init() {
+        let appSettings = AppSettings()
+        _settings = StateObject(wrappedValue: appSettings)
+        _reviewState = StateObject(wrappedValue: ReviewState(settings: appSettings))
+    }
+    
     var body: some View {
         NavigationView {
             // Sidebar
@@ -24,7 +30,8 @@ struct ContentView: View {
                         segments: segments,
                         audioPlayer: audioPlayer,
                         settings: settings,
-                        audioFiles: audioFiles
+                        audioFiles: audioFiles,
+                        reviewState: reviewState
                     ),
                     tag: "Review",
                     selection: $selectedView
@@ -96,7 +103,8 @@ struct ContentView: View {
                         segments: segments,
                         audioPlayer: audioPlayer,
                         settings: settings,
-                        audioFiles: audioFiles
+                        audioFiles: audioFiles,
+                        reviewState: reviewState
                     )
                 } else if selectedView == "Manage" {
                     ManageView(
@@ -136,7 +144,8 @@ struct ContentView: View {
                 segments: segments,
                 audioPlayer: audioPlayer,
                 settings: settings,
-                audioFiles: audioFiles
+                audioFiles: audioFiles,
+                reviewState: reviewState
             )
         }
         .preferredColorScheme(settings.settings.appearanceMode == .system ? nil :

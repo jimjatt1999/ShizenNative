@@ -9,11 +9,13 @@ class AudioPlayer: ObservableObject {
     
     private var timer: Timer?
     private var currentEndTime: Double?
+    private var autoAdvanceHandler: (() -> Void)?
     
     func load(url: URL) {
         do {
             audioPlayer = try AVAudioPlayer(contentsOf: url)
             audioPlayer?.enableRate = true
+            audioPlayer?.prepareToPlay()
             print("Audio loaded successfully: \(url.lastPathComponent)")
         } catch {
             print("Error loading audio: \(error)")
@@ -25,49 +27,38 @@ class AudioPlayer: ObservableObject {
         audioPlayer?.rate = rate
     }
     
-    func playSegment(segment: Segment) {
-        print("Playing segment:")
-        print("ID: \(segment.id)")
-        print("Start: \(segment.start)")
-        print("End: \(segment.end)")
-        print("Text: \(segment.text)")
+    func playSegment(segment: Segment, onComplete: (() -> Void)? = nil) {
+        print("Playing segment: \(segment.id)")
+        autoAdvanceHandler = onComplete
         
-        playSegment(start: segment.start, end: segment.end, segmentId: segment.id.uuidString)
-    }
-    
-    func playSegment(start: Double, end: Double, segmentId: String? = nil) {
         guard let player = audioPlayer else {
             print("No audio player available")
             return
         }
         
-        // Stop any existing playback and timer
-        stop()
-        
-        print("Setting up playback:")
-        print("Start time: \(start)")
-        print("End time: \(end)")
-        print("Current time before seek: \(player.currentTime)")
-        
-        // Set up new playback
-        player.currentTime = start
-        currentEndTime = end
-        currentSegmentId = segmentId
+        // Set up playback
+        player.currentTime = segment.start
+        currentEndTime = segment.end
+        currentSegmentId = segment.id.uuidString
         player.rate = playbackRate
-        
-        print("Current time after seek: \(player.currentTime)")
         
         // Start playback
         player.play()
         isPlaying = true
         
-        // Start timer to track progress and handle segment end
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
+        // Start timer
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] _ in
+            guard let self = self,
+                  let player = self.audioPlayer,
+                  let endTime = self.currentEndTime else { return }
+            
             self.currentTime = player.currentTime
             
-            if let endTime = self.currentEndTime, player.currentTime >= endTime {
-                self.stop()
+            if player.currentTime >= endTime {
+                let handler = self.autoAdvanceHandler
+                self.autoAdvanceHandler = nil
+                handler?()
             }
         }
     }
@@ -80,16 +71,16 @@ class AudioPlayer: ObservableObject {
     }
     
     func stop() {
-        audioPlayer?.stop()
+        audioPlayer?.pause()
         timer?.invalidate()
         timer = nil
         isPlaying = false
         currentSegmentId = nil
+        autoAdvanceHandler = nil
     }
     
     func seek(to time: Double) {
         audioPlayer?.currentTime = time
         currentTime = time
-        print("Seeked to time: \(time)")
     }
 }

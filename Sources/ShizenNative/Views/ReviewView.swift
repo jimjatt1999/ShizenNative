@@ -5,22 +5,16 @@ struct ReviewView: View {
     @ObservedObject var audioPlayer: AudioPlayer
     @ObservedObject var settings: AppSettings
     let audioFiles: [String: URL]
-    @StateObject private var reviewState: ReviewState
+    @ObservedObject var reviewState: ReviewState
     @State private var refreshID = UUID()
     @State private var forceReload = false
     @State private var sessionStartTime: Date?
     
-    init(segments: [Segment], audioPlayer: AudioPlayer, settings: AppSettings, audioFiles: [String: URL]) {
-        self.segments = segments
-        self.audioPlayer = audioPlayer
-        self.settings = settings
-        self.audioFiles = audioFiles
-        self._reviewState = StateObject(wrappedValue: ReviewState(settings: settings))
-    }
-    
     var visibleSegments: [Segment] {
         // Filter out hidden segments first
         let availableSegments = segments.filter { !$0.isHiddenFromSRS }
+        
+        // Always show the user-specified number of cards
         let startIndex = reviewState.currentIndex
         let maxCards = settings.settings.cardsPerFeed
         let endIndex = min(startIndex + maxCards, availableSegments.count)
@@ -28,16 +22,37 @@ struct ReviewView: View {
         guard startIndex < availableSegments.count else { return [] }
         
         // Get the slice of segments
-        let segmentSlice = Array(availableSegments[startIndex..<endIndex])
+        var segmentSlice = Array(availableSegments[startIndex..<endIndex])
         
         // Filter for due cards and new cards
-        return segmentSlice.filter { segment in
+        segmentSlice = segmentSlice.filter { segment in
             let segmentId = segment.id.uuidString
             if let card = reviewState.reviewCards[segmentId] {
                 return card.dueDate <= Date()
             }
             return reviewState.todayNewCards < settings.settings.newCardsPerDay
         }
+        
+        // If we have fewer cards than requested after filtering, try to get more
+        if segmentSlice.count < maxCards {
+            var additionalStartIndex = endIndex
+            while segmentSlice.count < maxCards && additionalStartIndex < availableSegments.count {
+                let segment = availableSegments[additionalStartIndex]
+                let segmentId = segment.id.uuidString
+                
+                if let card = reviewState.reviewCards[segmentId] {
+                    if card.dueDate <= Date() {
+                        segmentSlice.append(segment)
+                    }
+                } else if reviewState.todayNewCards < settings.settings.newCardsPerDay {
+                    segmentSlice.append(segment)
+                }
+                
+                additionalStartIndex += 1
+            }
+        }
+        
+        return segmentSlice
     }
     
     var body: some View {
@@ -122,8 +137,6 @@ struct ReviewView: View {
         // Update new cards count if this was a new card
         if card.reviews == 0 && response != "again" {
             reviewState.todayNewCards += 1
-            UserDefaults.standard.set(reviewState.todayNewCards, forKey: "todayNewCards")
-            UserDefaults.standard.set(Date(), forKey: "lastReviewDate")
         }
         
         // Update card
@@ -132,17 +145,16 @@ struct ReviewView: View {
         reviewState.reviewCards[segmentId] = card
         
         // Save state
-        if let data = try? JSONEncoder().encode(reviewState.reviewCards) {
-            UserDefaults.standard.set(data, forKey: "reviewCards")
-            UserDefaults.standard.synchronize()
-        }
+        reviewState.save()
         
         // Move to next card
         reviewState.currentIndex += 1
         audioPlayer.stop()
         
         // Force refresh to update visible cards
-        refreshView()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            refreshView()
+        }
     }
 }
 

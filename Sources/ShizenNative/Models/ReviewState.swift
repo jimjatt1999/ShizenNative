@@ -39,4 +39,21 @@ class ReviewState: ObservableObject {
             UserDefaults.standard.synchronize()
         }
     }
+    
+    func createBackup() {
+        if let encoded = try? JSONEncoder().encode(reviewCards) {
+            UserDefaults.standard.set(encoded, forKey: "reviewCards.backup")
+        }
+        UserDefaults.standard.set(todayNewCards, forKey: "todayNewCards.backup")
+        UserDefaults.standard.synchronize()
+    }
+    
+    func restoreFromBackup() {
+        if let data = UserDefaults.standard.data(forKey: "reviewCards.backup"),
+           let cards = try? JSONDecoder().decode([String: ReviewScheduler.Card].self, from: data) {
+            reviewCards = cards
+        }
+        todayNewCards = UserDefaults.standard.integer(forKey: "todayNewCards.backup")
+        save()
+    }
 }
