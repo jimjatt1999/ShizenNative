@@ -13,10 +13,10 @@ struct UploadView: View {
         VStack(spacing: 0) {
             // Source selector
             Picker("Source", selection: $selectedSource) {
-                Label("File", systemImage: "doc").tag(AudioSourceType.fileUpload)
-                Label("Record", systemImage: "mic").tag(AudioSourceType.recording)
-                Label("Podcast", systemImage: "radio").tag(AudioSourceType.podcast)
-                Label("YouTube", systemImage: "play.tv").tag(AudioSourceType.youtube)
+                ForEach(AudioSourceType.allCases, id: \.self) { source in
+                    Label(source.rawValue, systemImage: source.icon)
+                        .tag(source)
+                }
             }
             .pickerStyle(.segmented)
             .padding()
@@ -52,7 +52,7 @@ struct UploadView: View {
                                             onFileSelected(url)
                                         }
                                     case .youtube:
-                                        YoutubeView { url in
+                                        YouTubeView { url in
                                             onFileSelected(url)
                                         }
                                     }

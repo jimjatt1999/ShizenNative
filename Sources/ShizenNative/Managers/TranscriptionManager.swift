@@ -1,56 +1,62 @@
 import Foundation
 
-class TranscriptionManager: ObservableObject {
-    enum TranscriptionError: Error {
-        case pythonError(String)
-        case scriptNotFound
-        case invalidOutput
-        case pythonNotFound
-    }
+enum TranscriptionError: Error {
+    case scriptNotFound
+    case invalidOutput
+    case pythonError(String)
+    case transcriptionFailed(String)
     
+    var localizedDescription: String {
+        switch self {
+        case .scriptNotFound:
+            return "Transcription script not found"
+        case .invalidOutput:
+            return "Invalid transcription output"
+        case .pythonError(let message):
+            return "Python error: \(message)"
+        case .transcriptionFailed(let message):
+            return "Transcription failed: \(message)"
+        }
+    }
+}
+
+@MainActor
+class TranscriptionManager: ObservableObject {
     private func findPythonPath() throws -> String {
-        // Try different possible Python locations
-        let possiblePaths = [
-            "/opt/anaconda3/bin/python3",
-            "/usr/bin/python3",
-            "/usr/local/bin/python3",
-            "/opt/homebrew/bin/python3",
-            "/Library/Frameworks/Python.framework/Versions/3.9/bin/python3",
-            "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3",
-            "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"
-        ]
-        
-        // Use `which python3` command to find Python
-        let whichProcess = Process()
-        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        whichProcess.arguments = ["python3"]
-        
+        let process = Process()
         let pipe = Pipe()
-        whichProcess.standardOutput = pipe
+        
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["python3"]
+        process.standardOutput = pipe
         
         do {
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
+            try process.run()
+            process.waitUntilExit()
             
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !path.isEmpty {
-                print("Found Python at: \(path)")
                 return path
             }
         } catch {
-            print("Error finding Python with 'which': \(error)")
+            print("Error finding Python path: \(error)")
         }
         
-        // Try the possible paths
-        for path in possiblePaths {
+        // Fallback paths
+        let pythonPaths = [
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+            "/opt/homebrew/bin/python3"
+        ]
+        
+        for path in pythonPaths {
             if FileManager.default.fileExists(atPath: path) {
-                print("Found Python at: \(path)")
                 return path
             }
         }
         
-        throw TranscriptionError.pythonNotFound
+        throw TranscriptionError.pythonError("Python 3 not found")
     }
     
     private func getScriptPath() -> String? {
@@ -110,7 +116,7 @@ class TranscriptionManager: ObservableObject {
             Task {
                 let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                 if let errorOutput = String(data: errorData, encoding: .utf8), !errorOutput.isEmpty {
-                    print("Progress output: \(errorOutput)")
+                    print("Error output: \(errorOutput)")
                 }
             }
             
@@ -142,7 +148,7 @@ class TranscriptionManager: ObservableObject {
             }
         } catch {
             print("Process error: \(error)")
-            throw error
+            throw TranscriptionError.transcriptionFailed(error.localizedDescription)
         }
     }
 }
