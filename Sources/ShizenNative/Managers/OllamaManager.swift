@@ -9,7 +9,7 @@ class OllamaManager: ObservableObject {
     
     func analyzeJapanese(text: String) async throws -> JapaneseAnalysis {
         let body: [String: Any] = [
-            "model": "llama3.2:1b",
+            "model": "deepseek-r1:1.5b",
             "prompt": """
             Analyze this Japanese text (provide response in JSON only):
             "\(text)"
