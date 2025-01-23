@@ -6,7 +6,8 @@ struct ManageView: View {
     @Binding var segments: [Segment]
     @Binding var audioFiles: [String: URL]
     @StateObject var reviewState: ReviewState
-    @State private var selectedSource: String? // null means "All Sources"
+    @StateObject private var settings = AppSettings()  // Add this line
+    @State private var selectedSource: String?
     @State private var searchText = ""
     @State private var showingRenameAlert = false
     @State private var showingDeleteAlert = false
@@ -16,6 +17,7 @@ struct ManageView: View {
     @State private var currentPlayingIndex = 0
     @State private var playbackSpeed: Float = 1.0
     @State private var selectedSegments: Set<UUID> = []
+    @State private var currentSourceId: String?
     
     var filteredSources: [String] {
         let sources = Array(Set(segments.map { $0.sourceId })).sorted()
@@ -26,7 +28,6 @@ struct ManageView: View {
     var currentSegments: [Segment] {
         var filtered = segments
         
-        // Apply search filter
         if !searchText.isEmpty {
             filtered = filtered.filter { segment in
                 segment.text.localizedCaseInsensitiveContains(searchText) ||
@@ -34,12 +35,10 @@ struct ManageView: View {
             }
         }
         
-        // Apply source filter
         if let source = selectedSource {
             filtered = filtered.filter { $0.sourceId == source }
         }
         
-        // Apply review status filter
         if let status = filterStatus {
             filtered = filtered.filter { segment in
                 let segmentStatus = getReviewStatus(for: segment)
@@ -47,7 +46,6 @@ struct ManageView: View {
             }
         }
         
-        // Sort by source and timestamp
         return filtered.sorted { s1, s2 in
             if s1.sourceId == s2.sourceId {
                 return s1.start < s2.start
@@ -89,7 +87,7 @@ struct ManageView: View {
                 if currentSegments.isEmpty {
                     emptyStateView
                 } else {
-                    segmentsList
+                    segmentsGrid
                 }
             }
         }
@@ -213,51 +211,46 @@ struct ManageView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    private var segmentsList: some View {
+    private var segmentsGrid: some View {
         ScrollView {
-            LazyVStack(spacing: 8) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 300, maximum: .infinity))],
+                spacing: 16
+            ) {
                 ForEach(currentSegments) { segment in
-                    HStack {
-                        // Selection circle
-                        Button(action: {
-                            toggleSelection(for: segment)
-                        }) {
-                            Image(systemName: selectedSegments.contains(segment.id) ? "circle.fill" : "circle")
-                                .foregroundColor(.blue)
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        // Play button and segment content
-                        SegmentRow(
+                    if let audioURL = audioFiles[segment.sourceId] {
+                        ReviewCardView(
                             segment: segment,
                             audioPlayer: audioPlayer,
-                            reviewState: reviewState,
-                            isPlaying: audioPlayer.isPlaying && audioPlayer.currentSegmentId == segment.id.uuidString,
-                            isCurrentSegment: isContinuousPlayback && currentSegments[safe: currentPlayingIndex]?.id == segment.id,
-                            isSelected: selectedSegments.contains(segment.id)
+                            settings: settings,
+                            audioURL: audioURL,
+                            onResponse: { response in
+                                handleResponse(for: segment, response: response)
+                            },
+                            isCompact: true,
+                            showControls: true,
+                            isSelected: selectedSegments.contains(segment.id),
+                            onSelect: {
+                                toggleSelection(for: segment)
+                            }
                         )
-                    }
-                    .padding(.horizontal)
-                    .background(
-                        Color.accentColor.opacity(selectedSegments.contains(segment.id) ? 0.1 : 0)
-                    )
-                    .contextMenu {
-                        Button(action: {
-                            var updatedSegment = segment
-                            updatedSegment.isHiddenFromSRS.toggle()
-                            updateSegment(updatedSegment)
-                        }) {
-                            Label(
-                                segment.isHiddenFromSRS ? "Show in SRS" : "Hide from SRS",
-                                systemImage: segment.isHiddenFromSRS ? "eye" : "eye.slash"
-                            )
-                        }
-                        
-                        Button(role: .destructive, action: {
-                            deleteSegments([segment])
-                        }) {
-                            Label("Delete", systemImage: "trash")
+                        .contextMenu {
+                            Button(action: {
+                                var updatedSegment = segment
+                                updatedSegment.isHiddenFromSRS.toggle()
+                                updateSegment(updatedSegment)
+                            }) {
+                                Label(    
+                                    segment.isHiddenFromSRS ? "Show in SRS" : "Hide from SRS",
+                                    systemImage: segment.isHiddenFromSRS ? "eye" : "eye.slash"
+                                )
+                            }
+                            
+                            Button(role: .destructive, action: {
+                                deleteSegments([segment])
+                            }) {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
                 }
@@ -286,12 +279,25 @@ struct ManageView: View {
         guard !currentSegments.isEmpty else { return }
         currentPlayingIndex = 0
         isContinuousPlayback = true
-        playCurrentSegment()
+        
+        let firstSegment = currentSegments[currentPlayingIndex]
+        prepareAudioForSegment(firstSegment)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            playCurrentSegment()
+        }
     }
     
-    private func stopPlayback() {
-        isContinuousPlayback = false
-        audioPlayer.stop()
+    private func prepareAudioForSegment(_ segment: Segment) {
+        if currentSourceId != segment.sourceId {
+            if let audioURL = audioFiles[segment.sourceId] {
+                audioPlayer.stop()
+                DispatchQueue.main.async {
+                    audioPlayer.load(url: audioURL)
+                    currentSourceId = segment.sourceId
+                }
+            }
+        }
     }
     
     private func playCurrentSegment() {
@@ -301,20 +307,42 @@ struct ManageView: View {
         }
         
         let segment = currentSegments[currentPlayingIndex]
-        if let audioURL = audioFiles[segment.sourceId] {
-            audioPlayer.load(url: audioURL)
-            audioPlayer.setPlaybackRate(playbackSpeed)
-            audioPlayer.playSegment(segment: segment) {
-                if isContinuousPlayback {
-                    currentPlayingIndex += 1
-                    if currentPlayingIndex < currentSegments.count {
-                        playCurrentSegment()
-                    } else {
-                        stopPlayback()
-                    }
+        prepareAudioForSegment(segment)
+        
+        audioPlayer.setPlaybackRate(playbackSpeed)
+        audioPlayer.playSegment(segment: segment) {
+            if isContinuousPlayback {
+                currentPlayingIndex += 1
+                if currentPlayingIndex < currentSegments.count {
+                    playCurrentSegment()
+                } else {
+                    stopPlayback()
                 }
             }
         }
+    }
+    
+    private func handleResponse(for segment: Segment, response: String) {
+        let segmentId = segment.id.uuidString
+        var card = reviewState.reviewCards[segmentId] ?? ReviewScheduler.Card()
+        
+        let nextDue = ReviewScheduler.processReview(card: &card, response: response)
+        
+        if card.reviews == 0 && response != "again" {
+            reviewState.todayNewCards += 1
+        }
+        
+        card.reviews += 1
+        card.dueDate = nextDue
+        reviewState.reviewCards[segmentId] = card
+        
+        reviewState.save()
+    }
+    
+    private func stopPlayback() {
+        isContinuousPlayback = false
+        audioPlayer.stop()
+        currentSourceId = nil
     }
     
     private func getReviewStatus(for segment: Segment) -> ReviewStatus {
@@ -407,12 +435,6 @@ struct ManageView: View {
     }
 }
 
-private extension Array {
-    subscript(safe index: Index) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}
-
 struct SourceRow: View {
     let source: String
     let segments: [Segment]
@@ -435,3 +457,6 @@ struct SourceRow: View {
         }
     }
 }
+                        
+                                    
+                                    

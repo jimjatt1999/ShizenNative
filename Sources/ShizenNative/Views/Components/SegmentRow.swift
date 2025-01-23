@@ -1,5 +1,30 @@
 import SwiftUI
 
+enum DifficultyTag: String, CaseIterable {
+    case easy
+    case medium
+    case hard
+    case veryHard
+    
+    var name: String {
+        switch self {
+        case .easy: return "Easy"
+        case .medium: return "Medium"
+        case .hard: return "Hard"
+        case .veryHard: return "Very Hard"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .easy: return .green
+        case .medium: return .blue
+        case .hard: return .orange
+        case .veryHard: return .red
+        }
+    }
+}
+
 struct SegmentRow: View {
     let segment: Segment
     @ObservedObject var audioPlayer: AudioPlayer
@@ -43,14 +68,7 @@ struct SegmentRow: View {
                     .frame(width: 24, height: 24)
             } else {
                 Button(action: {
-                    if isPlaying {
-                        audioPlayer.pause()
-                    } else {
-                        audioPlayer.stop()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            audioPlayer.playSegment(segment: segment)
-                        }
-                    }
+                    handlePlayback()
                 }) {
                     Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .foregroundColor(.blue)
@@ -65,10 +83,8 @@ struct SegmentRow: View {
                     .foregroundColor(isCurrentSegment ? .blue : .primary)
                 
                 HStack(spacing: 8) {
-                    // Review status badge
                     ReviewStatusBadge(status: reviewStatus)
                     
-                    // Difficulty indicator
                     Circle()
                         .fill(difficultyColor)
                         .frame(width: 8, height: 8)
@@ -107,10 +123,8 @@ struct SegmentRow: View {
         )
         .contextMenu {
             Button(action: {
-                // Toggle SRS visibility
                 var updatedSegment = segment
                 updatedSegment.isHiddenFromSRS.toggle()
-                // Notify parent to update segment
             }) {
                 Label(segment.isHiddenFromSRS ? "Show in SRS" : "Hide from SRS", 
                       systemImage: "eye")
@@ -119,7 +133,6 @@ struct SegmentRow: View {
             Menu("Tag Difficulty") {
                 ForEach(DifficultyTag.allCases, id: \.self) { tag in
                     Button(action: {
-                        // Add difficulty tag
                     }) {
                         Label(tag.name, systemImage: "tag.fill")
                             .foregroundColor(tag.color)
@@ -128,9 +141,21 @@ struct SegmentRow: View {
             }
             
             Button(action: {
-                // Add custom tag
             }) {
                 Label("Add Tag...", systemImage: "tag.fill")
+            }
+        }
+    }
+    
+    private func handlePlayback() {
+        if isPlaying {
+            audioPlayer.pause()
+        } else {
+            // Important: Stop any existing playback first
+            audioPlayer.stop()
+            // Small delay to ensure clean state
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                audioPlayer.playSegment(segment: segment)
             }
         }
     }
@@ -141,30 +166,5 @@ struct SegmentRow: View {
         formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = .pad
         return "\(formatter.string(from: start) ?? "0:00") - \(formatter.string(from: end) ?? "0:00")"
-    }
-}
-
-enum DifficultyTag: CaseIterable {
-    case easy
-    case medium
-    case hard
-    case veryHard
-    
-    var name: String {
-        switch self {
-        case .easy: return "Easy"
-        case .medium: return "Medium"
-        case .hard: return "Hard"
-        case .veryHard: return "Very Hard"
-        }
-    }
-    
-    var color: Color {
-        switch self {
-        case .easy: return .green
-        case .medium: return .blue
-        case .hard: return .orange
-        case .veryHard: return .red
-        }
     }
 }

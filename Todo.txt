@@ -1,0 +1,2 @@
+- Fix Renaming issue in manageview that looses source content
+- Build alpha mack dmg for demo distribution
