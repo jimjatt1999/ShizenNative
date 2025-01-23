@@ -1,24 +1,44 @@
-```markdown
-# Shizen - Japanese Language Learning SRS APP
+# Shizen - Japanese Language Learning Assistant
+
+![App Screenshot](screenshot.png) *<!-- Add actual screenshot path -->*
 
 A macOS app for immersive Japanese learning through audio content, powered by AI analysis and spaced repetition.
 
 ## Features
 
-- **Audio Learning**: Import from files, podcasts, YouTube, or recordings
-- **AI Analysis**: Grammar/vocabulary breakdowns with Ollama integration
-- **SRS System**: Spaced repetition with customizable intervals
-- **Content Management**: Podcast/Youtube integration, bulk operations
-- **Progress Tracking**: Detailed statistics and review history
+- **Multi-source Audio Import**
+  - Record directly in-app
+  - Upload local files (MP3/WAV/M4A/AAC)
+  - Download podcast episodes
+  - Extract audio from YouTube videos
+
+- **Smart Learning System**
+  - Automatic Whisper transcription
+  - AI-powered text analysis (Ollama integration)
+  - Customizable Spaced Repetition (SRS)
+  - Focus Mode for intensive practice
+
+- **Content Management**
+  - Bulk segment operations
+  - Duplicate detection
+  - Playback speed control (0.75x-2x)
+  - Detailed progress statistics
 
 ## Requirements
 
-- macOS 12.0+
-- Swift 5.7+
-- Python 3.9+ (for transcription)
-- [Ollama server](https://ollama.ai/) running locally
+- **System**
+  - macOS 12 Monterey or newer
+  - 8GB RAM minimum (16GB recommended for AI features)
+
+- **Dependencies**
+  - [Python 3.9+](https://www.python.org/)
+  - [FFmpeg](https://ffmpeg.org/)
+  - [Ollama](https://ollama.ai/) (running locally)
+  - [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 
 ## Installation
+
+### Swift Package Manager
 
 ```bash
 # Clone repository
@@ -32,93 +52,140 @@ pip install yt-dlp
 # Build and run
 swift build
 swift run
-```
 
-For Xcode development:
-```bash
-xed .  # Open in Xcode
-# Build & Run (⌘R)
-```
+Xcode Development
+	1.	Open project:
 
-## Configuration
+xed .
 
-1. Start Ollama server:
-```bash
+
+	2.	Build:
+	•	⌘B or Product > Build
+	3.	Run:
+	•	⌘R or Product > Run
+
+Configuration
+	1.	Start Ollama server in terminal:
+
 ollama serve
-```
 
-2. Pull required AI model:
-```bash
+
+	2.	Download AI model:
+
 ollama pull deepseek-r1:1.5b
-```
 
-## Usage
 
-# Core Workflows Guide
+	3.	Enable required permissions:
+	•	Microphone access (System Preferences > Security)
+	•	File system access (when first importing audio)
 
-## 1. Audio Import Methods
+Usage Guide
 
-### 🎙️ Record Directly
-1. Go to Upload → Record tab
-2. Click microphone icon to start recording
-3. Click again to stop - auto-saves to review queue
+1. Importing Audio Content
 
-###  File Upload
-1. Drag-drop audio files into Upload tab
-2. Supported formats: MP3, WAV, M4A, AAC
-3. Files get processed into segments automatically
+🎙️ Record Directly
+	1.	Navigate to Upload → Record tab
+	2.	Click microphone icon to start/stop recording
+	3.	Recordings auto-save for processing
 
-### Podcasts
-1. Search Japanese podcasts in Podcast tab
-   - Pre-loaded with educational podcasts
-2. Browse episodes → Download audio
-3. Episodes auto-import for transcription
+📂 File Upload
+	1.	Drag-drop audio files into Upload tab
+	2.	Supported formats: MP3, WAV, M4A, AAC
+	3.	Files process automatically (check Notifications)
 
-###  YouTube
-1. Paste YouTube URL in YouTube tab
-2. App extracts audio → converts to MP3
-3. Processes like local files
+🎧 Podcasts
+	1.	Search Japanese podcasts in Podcast tab
+	2.	Browse episodes from educational channels:
+	•	JapanesePod101
+	•	News in Slow Japanese
+	•	NHK World Radio
+	3.	Download episodes → Auto-process to segments
 
-## 2. Transcription & Segments
+▶️ YouTube
+	1.	Paste YouTube URL in YouTube tab
+	2.	App handles:
+	•	Audio extraction
+	•	MP3 conversion
+	•	Automatic segmentation
 
-After audio import:
-- Automatic Whisper transcription creates text segments
-- Segments show audio waveform + text
-- Tap eye icon to reveal/hide transcript
-- Edit segment boundaries in Manage tab
+2. Working with Segments
+	•	Automatic Processing:
+	•	Whisper transcription creates text segments
+	•	Visual waveform display
+	•	Auto-generated timestamps
+	•	Segment Management:
+	•	Toggle transcripts with 👁️ icon
+	•	Adjust boundaries in Manage tab
+	•	Bulk tag/delete segments
+	•	Mark duplicates/hidden from SRS
 
-## 3. SRS Practice System
+3. Spaced Repetition (SRS)
 
-Spaced Repetition:
-1. Cards appear in Review queue based on:
-   - New cards (38/day default)
-   - Due cards (algorithm-based)
-2. Four response options:
-   - Again (1m) | Hard (10m) | Good (4d) | Easy (7d)
-3. Practice in:
-   - **Normal Mode**: Mixed cards feed
-   - **Focus Mode**: Intensive single-source sessions
+Review System:
+	•	Cards queue based on:
+	•	New cards (38/day default)
+	•	Algorithm-scheduled reviews
+	•	Response options:
+	•	Again (1m) | Hard (10m) | Good (4d) | Easy (7d)
 
-## 4. AI Analysis Tools
+Practice Modes:
+	•	Normal Mode: Mixed card feed
+	•	Focus Mode:
+	•	Single-source intensive sessions
+	•	Save/Restore progress
+	•	Session statistics
 
-For any Japanese text segment:
-1. Click brain icon to activate analysis
-2. AI returns:
-   - English translation
-   - Word-by-word breakdown (reading/meaning)
-   - Grammar explanations
-   - Cultural context notes
-3. Powered by Ollama's `deepseek-r1:1.5b` model
+4. AI-Powered Analysis
 
-## Pro Tips
-- Bulk tag segments as "Hidden from SRS" in Manage tab
-- Adjust playback speed during reviews (0.75x-2x)
-- Export SRS stats to CSV for tracking
-- Use "Hard" tag to isolate difficult segments
+Text Breakdown:
+	1.	Click 🧠 icon on any segment
+	2.	Get instant analysis:
+	•	English translation
+	•	Word-by-word readings/meanings
+	•	Grammar explanations
+	•	Cultural context notes
 
-## License
+Customization:
+	•	Adjust AI temperature in Settings
+	•	Modify analysis prompts
+	•	Cache management for responses
 
-MIT License - See [LICENSE](LICENSE)
-```
+Advanced Features
+	•	Playback Controls:
+	•	Speed adjustment (0.75x-2x)
+	•	Loop segments
+	•	Waveform scrubbing
+	•	Statistics:
+	•	Review history timeline
+	•	Accuracy heatmaps
+	•	Retention curves
+	•	CSV export
+	•	Custom SRS:
+	•	Modify learning steps
+	•	Adjust ease factors
+	•	Set daily limits
+	•	Backup/restore progress
 
-Includes both Swift Package Manager and Xcode workflows. The Swift CLI commands assume you have the full toolchain installed via Xcode.
+Troubleshooting
+
+Common Issues:
+	•	Ollama Connection Failed:
+	•	Verify ollama serve is running
+	•	Check firewall settings
+	•	Transcription Failures:
+	•	Ensure Python/FFmpeg installed
+	•	Verify audio file permissions
+	•	Playback Issues:
+	•	Convert files to MP3 format
+	•	Check system audio output
+
+License
+
+MIT License - See LICENSE file for details
+
+Contributing:
+We welcome contributions! Please see CONTRIBUTING.md for guidelines.
+
+Support:
+For issues and feature requests, please use the GitHub Issues tracker.
+
