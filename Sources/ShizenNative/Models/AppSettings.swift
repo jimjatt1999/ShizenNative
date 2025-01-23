@@ -6,6 +6,24 @@ enum AppearanceMode: String, Codable, Equatable, CaseIterable {
     case dark
 }
 
+struct LearningSteps: Codable, Equatable {
+    var steps: [Double]  // in minutes
+    var againStep: Double
+    var graduatingInterval: Int  // in days
+    var easyInterval: Int      // in days
+    var startingEase: Double
+    
+    static var `default`: LearningSteps {
+        LearningSteps(
+            steps: [1.0, 10.0],
+            againStep: 1.0,
+            graduatingInterval: 1,
+            easyInterval: 4,
+            startingEase: 2.5
+        )
+    }
+}
+
 struct UserSettings: Codable, Equatable {
     var newCardsPerDay: Int
     var cardsPerFeed: Int
@@ -13,6 +31,7 @@ struct UserSettings: Codable, Equatable {
     var countFocusModeInSRS: Bool
     var darkMode: Bool
     var showTranscriptsByDefault: Bool
+    var learningSteps: LearningSteps
     
     static var `default`: UserSettings {
         UserSettings(
@@ -21,7 +40,8 @@ struct UserSettings: Codable, Equatable {
             appearanceMode: .system,
             countFocusModeInSRS: true,
             darkMode: false,
-            showTranscriptsByDefault: false
+            showTranscriptsByDefault: false,
+            learningSteps: .default
         )
     }
 }

@@ -1,5 +1,87 @@
 import SwiftUI
 
+struct ReviewButtonWithTooltip: View {
+    let title: String
+    let color: Color
+    let action: () -> Void
+    let card: ReviewScheduler.Card
+    
+    @State private var isHovered = false
+    @State private var showTooltip = false
+    
+    private var nextReviewDate: Date {
+        var cardCopy = card
+        return ReviewScheduler.processReview(card: &cardCopy, response: title.lowercased())
+    }
+    
+    private var tooltipText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        let dateStr = formatter.string(from: nextReviewDate)
+        
+        let calendar = Calendar.current
+        if calendar.isDateInToday(nextReviewDate) {
+            return "Later today at \(dateStr.components(separatedBy: " at ").last ?? "")"
+        } else if calendar.isDateInTomorrow(nextReviewDate) {
+            return "Tomorrow at \(dateStr.components(separatedBy: " at ").last ?? "")"
+        }
+        return dateStr
+    }
+    
+    private var tooltipOffset: CGFloat {
+        showTooltip ? -40 : 0
+    }
+    
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Tooltip
+            if isHovered {
+                Text(tooltipText)
+                    .font(.system(size: 12))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(.windowBackgroundColor))
+                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    )
+                    .offset(y: tooltipOffset)
+                    .opacity(showTooltip ? 1 : 0)
+                    .animation(.spring(response: 0.2, dampingFraction: 0.8), value: tooltipOffset)
+            }
+            
+            // Button
+            Button(action: action) {
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(color.opacity(isHovered ? 0.9 : 1.0))
+                    )
+                    .foregroundColor(.white)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .scaleEffect(isHovered ? 1.05 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: isHovered)
+        }
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showTooltip = true
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    showTooltip = false
+                }
+            }
+        }
+    }
+}
+
 struct ReviewCard: View {
     let segment: Segment
     @ObservedObject var audioPlayer: AudioPlayer
@@ -25,19 +107,19 @@ struct ReviewCard: View {
         audioPlayer.isPlaying && audioPlayer.currentSegmentId == segment.id.uuidString
     }
     
+    private var currentCard: ReviewScheduler.Card {
+        reviewState.reviewCards[segment.id.uuidString] ?? ReviewScheduler.Card()
+    }
+    
     private func handleResponse(_ response: String) {
         print("[Review] Handling response: \(response)")
-        
-        // Stop any playing audio
         audioPlayer.stop()
         
-        // Get the current card state
         let segmentId = segment.id.uuidString
         let isNewCard = reviewState.reviewCards[segmentId] == nil
         
         print("[Review] Sending notification - Response: \(response), New Card: \(isNewCard)")
         
-        // Post notification for statistics
         NotificationCenter.default.post(
             name: .reviewCompleted,
             object: nil,
@@ -47,7 +129,6 @@ struct ReviewCard: View {
             ]
         )
         
-        // Call the response handler
         onResponse(response)
     }
     
@@ -96,7 +177,6 @@ struct ReviewCard: View {
                 }
             }
             
-            // AI Analysis section (if enabled)
             if showAIAnalysis {
                 Divider()
                 AIAnalysisView(text: segment.text)
@@ -132,20 +212,35 @@ struct ReviewCard: View {
                 
                 Divider()
                 
-                // Review buttons
+                // Review buttons with tooltips
                 HStack(spacing: 15) {
-                    ReviewButton(title: "Again", color: .red) {
-                        handleResponse("again")
-                    }
-                    ReviewButton(title: "Hard", color: .orange) {
-                        handleResponse("hard")
-                    }
-                    ReviewButton(title: "Good", color: .green) {
-                        handleResponse("good")
-                    }
-                    ReviewButton(title: "Easy", color: .blue) {
-                        handleResponse("easy")
-                    }
+                    ReviewButtonWithTooltip(
+                        title: "Again",
+                        color: .red,
+                        action: { handleResponse("again") },
+                        card: currentCard
+                    )
+                    
+                    ReviewButtonWithTooltip(
+                        title: "Hard",
+                        color: .orange,
+                        action: { handleResponse("hard") },
+                        card: currentCard
+                    )
+                    
+                    ReviewButtonWithTooltip(
+                        title: "Good",
+                        color: .green,
+                        action: { handleResponse("good") },
+                        card: currentCard
+                    )
+                    
+                    ReviewButtonWithTooltip(
+                        title: "Easy",
+                        color: .blue,
+                        action: { handleResponse("easy") },
+                        card: currentCard
+                    )
                 }
                 .padding(15)
             }
@@ -162,31 +257,6 @@ struct ReviewCard: View {
             if isPlaying {
                 audioPlayer.stop()
             }
-        }
-    }
-}
-
-struct ReviewButton: View {
-    let title: String
-    let color: Color
-    let action: () -> Void
-    @State private var isHovered = false
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(color.opacity(isHovered ? 0.9 : 1.0))
-                .foregroundColor(.white)
-                .cornerRadius(6)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .scaleEffect(isHovered ? 1.05 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: isHovered)
-        .onHover { hovering in
-            isHovered = hovering
         }
     }
 }

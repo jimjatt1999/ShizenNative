@@ -16,7 +16,8 @@ struct SettingsView: View {
             appearanceMode: .system,
             countFocusModeInSRS: true,
             darkMode: false,
-            showTranscriptsByDefault: false
+            showTranscriptsByDefault: false,
+            learningSteps: .default
         ))
     }
     
@@ -83,6 +84,9 @@ struct SettingsView: View {
                     }
                     .padding()
                 }
+                
+                // Learning Steps Settings
+                LearningStepsSettingsView(learningSteps: $tempSettings.learningSteps)
                 
                 // Review Options
                 GroupBox {
