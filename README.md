@@ -1,4 +1,4 @@
-# Shizen - Japanese Language Learning Assistant
+# Shizen - AI powered SRS Japanese Language Learning Native Mac App
 
 ![App Screenshot](assets/screenshot.png)
 
