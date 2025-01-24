@@ -1,4 +1,6 @@
 import SwiftUI
+import NaturalLanguage
+import Translation  // Add this import
 
 struct ReviewButtonWithTooltip: View {
     let title: String
@@ -91,7 +93,10 @@ struct ReviewCard: View {
     let onResponse: (String) -> Void
     
     @State private var showTranscript: Bool
-    @State private var showAIAnalysis = false
+    @State private var showLanguageAnalysis = false
+    @State private var showTranslation = false
+    @State private var translatedText: String = ""
+    @State private var isTranslating = false
     
     init(segment: Segment, audioPlayer: AudioPlayer, settings: AppSettings, reviewState: ReviewState, audioURL: URL, onResponse: @escaping (String) -> Void) {
         self.segment = segment
@@ -132,14 +137,97 @@ struct ReviewCard: View {
         onResponse(response)
     }
     
+    private func translateText() {
+        guard !isTranslating else { return }
+        isTranslating = true
+        
+        Task {
+            do {
+                let tagger = NSLinguisticTagger(tagSchemes: [.language], options: 0)
+                tagger.string = segment.text
+                
+                // Use Apple's built-in translation service
+                let request = NSURLRequest(url: URL(string: "https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&q=\(segment.text.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")!)
+                
+                let (data, response) = try await URLSession.shared.data(for: request as URLRequest)
+                
+                if let httpResponse = response as? HTTPURLResponse,
+                   httpResponse.statusCode == 200,
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [Any],
+                   let translations = json[0] as? [[Any]],
+                   let translation = translations[0][0] as? String {
+                    
+                    await MainActor.run {
+                        withAnimation {
+                            self.translatedText = translation
+                            self.isTranslating = false
+                        }
+                    }
+                } else {
+                    throw NSError(domain: "TranslationError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to parse translation response"])
+                }
+            } catch {
+                await MainActor.run {
+                    withAnimation {
+                        self.translatedText = "Translation failed: \(error.localizedDescription)"
+                        self.isTranslating = false
+                    }
+                }
+            }
+        }
+    }
+    
+    // Remove the simpleTranslate function as it's no longer needed
+    
+    private func simpleTranslate(_ text: String) -> String {
+        // Basic Japanese-to-English dictionary
+        let dictionary: [String: String] = [
+            "コンビニエンスストア": "Convenience store",
+            "鬼ギリ": "Onigiri",
+            "穴上げ": "Price increase",
+            "お米": "Rice",
+            "行動": "Movement",
+            "中": "While",
+            "大事な": "Important",
+            "どうやったら": "How to",
+            "最大限": "To the fullest",
+            "美味しく": "Deliciously",
+            "食べられる": "Eat",
+            "プロ": "Professional",
+            "生きました": "Asked"
+        ]
+        
+        // Split the text into words and translate using the dictionary
+        let translatedText = text.components(separatedBy: " ").map { word in
+            return dictionary[word] ?? word
+        }.joined(separator: " ")
+        
+        return translatedText
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Text content with reveal and AI buttons
+            // Text content with reveal and language analysis buttons
             HStack {
                 if showTranscript {
-                    Text(segment.text)
-                        .font(.system(size: 18))
-                        .transition(.opacity)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(segment.text)
+                            .font(.system(size: 18))
+                        
+                        if showTranslation {
+                            Divider()
+                            
+                            if isTranslating {
+                                ProgressView()
+                                    .padding(.vertical, 8)
+                            } else {
+                                Text(translatedText)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .transition(.opacity)
                 } else {
                     Text("Tap to reveal transcript")
                         .font(.system(size: 18))
@@ -152,11 +240,23 @@ struct ReviewCard: View {
                 HStack(spacing: 12) {
                     Button(action: {
                         withAnimation {
-                            showAIAnalysis.toggle()
+                            showLanguageAnalysis.toggle()
                         }
                     }) {
-                        Image(systemName: showAIAnalysis ? "brain.fill" : "brain")
-                            .foregroundColor(.purple)
+                        Image(systemName: showLanguageAnalysis ? "book.fill" : "book")
+                            .foregroundColor(.blue)
+                    }
+                    
+                    Button(action: {
+                        withAnimation {
+                            showTranslation.toggle()
+                            if showTranslation {
+                                translateText()
+                            }
+                        }
+                    }) {
+                        Image(systemName: showTranslation ? "character.book.closed.fill" : "character.book.closed")
+                            .foregroundColor(.blue)
                     }
                     
                     Button(action: {
@@ -177,9 +277,9 @@ struct ReviewCard: View {
                 }
             }
             
-            if showAIAnalysis {
+            if showLanguageAnalysis {
                 Divider()
-                AIAnalysisView(text: segment.text)
+                LanguageAnalysisView(text: segment.text)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             
@@ -252,7 +352,7 @@ struct ReviewCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
-        .animation(.spring(), value: showAIAnalysis)
+        .animation(.spring(), value: showLanguageAnalysis)
         .onDisappear {
             if isPlaying {
                 audioPlayer.stop()

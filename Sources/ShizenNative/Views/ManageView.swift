@@ -400,6 +400,9 @@ struct ManageView: View {
     }
     
     private func renameSource(from oldName: String, to newName: String) {
+        guard !newName.isEmpty && oldName != newName else { return }
+        
+        // Update segments
         segments = segments.map { segment in
             var segment = segment
             if segment.sourceId == oldName {
@@ -408,13 +411,34 @@ struct ManageView: View {
             return segment
         }
         
+        // Update audio files
         if let audioURL = audioFiles[oldName] {
             audioFiles[newName] = audioURL
             audioFiles.removeValue(forKey: oldName)
         }
         
+        // Update selected source
         selectedSource = newName
+        
+        // Update current source ID if it matches the old name
+        if currentSourceId == oldName {
+            currentSourceId = newName
+        }
+        
+        // Stop playback to prevent any audio issues
+        if isContinuousPlayback && currentSourceId == oldName {
+            stopPlayback()
+        }
+        
+        // Save state immediately
         saveState()
+        
+        // Force a UI refresh by triggering state changes
+        DispatchQueue.main.async {
+            let tempSelection = selectedSource
+            selectedSource = nil
+            selectedSource = tempSelection
+        }
     }
     
     private func deleteSource(_ sourceId: String) {

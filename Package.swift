@@ -13,7 +13,11 @@ let package = Package(
         .executableTarget(
             name: "ShizenNative",
             dependencies: ["PythonKit"],
-            path: "Sources"
+            path: "Sources",
+            linkerSettings: [
+                .linkedFramework("CoreServices"),
+                .linkedFramework("NaturalLanguage")
+            ]
         )
     ]
 )

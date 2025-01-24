@@ -1,5 +1,3 @@
-// Put this in Sources/ShizenNative/Views/Manage/ReviewCardView.swift
-
 import SwiftUI
 
 struct ReviewCardView: View {
@@ -14,7 +12,7 @@ struct ReviewCardView: View {
     let onSelect: (() -> Void)?
     
     @State private var showTranscript: Bool
-    @State private var showAIAnalysis = false
+    @State private var showLanguageAnalysis = false
     
     var isPlaying: Bool {
         audioPlayer.isPlaying && audioPlayer.currentSegmentId == segment.id.uuidString
@@ -81,11 +79,11 @@ struct ReviewCardView: View {
                     HStack(spacing: 12) {
                         Button(action: {
                             withAnimation {
-                                showAIAnalysis.toggle()
+                                showLanguageAnalysis.toggle()
                             }
                         }) {
-                            Image(systemName: showAIAnalysis ? "brain.fill" : "brain")
-                                .foregroundColor(.purple)
+                            Image(systemName: showLanguageAnalysis ? "book.fill" : "book")
+                                .foregroundColor(.blue)
                         }
                         
                         Button(action: {
@@ -106,9 +104,9 @@ struct ReviewCardView: View {
                     }
                 }
                 
-                if showAIAnalysis {
+                if showLanguageAnalysis {
                     Divider()
-                    AIAnalysisView(text: segment.text)
+                    LanguageAnalysisView(text: segment.text)
                         .frame(height: isCompact ? 120 : 180)
                 }
                 
