@@ -44,7 +44,7 @@ struct FocusModeSourceSelection: View {
                     .foregroundColor(.secondary)
             }
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .frame(minWidth: 1000, minHeight: 500)
         .navigationTitle("Focus Mode")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

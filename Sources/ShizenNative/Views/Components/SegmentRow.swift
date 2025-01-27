@@ -27,6 +27,7 @@ enum DifficultyTag: String, CaseIterable {
 
 struct SegmentRow: View {
     let segment: Segment
+    let segments: [Segment]
     @ObservedObject var audioPlayer: AudioPlayer
     @ObservedObject var reviewState: ReviewState
     var isPlaying: Bool
@@ -89,10 +90,13 @@ struct SegmentRow: View {
                         .fill(difficultyColor)
                         .frame(width: 8, height: 8)
                     
-                    if segment.isDuplicate {
+                    if DuplicateManager.isDuplicate(segment, in: segments) {
                         Text("Duplicate")
                             .font(.caption)
-                            .foregroundColor(.orange)
+                            .foregroundColor(.red)
+                            .padding(4)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(4)
                     }
                     
                     if segment.isHiddenFromSRS {

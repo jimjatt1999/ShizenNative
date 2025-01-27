@@ -217,12 +217,13 @@ struct ManageView: View {
                 columns: [GridItem(.adaptive(minimum: 300, maximum: .infinity))],
                 spacing: 16
             ) {
-                ForEach(currentSegments) { segment in
+                ForEach(currentSegments, id: \.id) { segment in
                     if let audioURL = audioFiles[segment.sourceId] {
                         ReviewCardView(
                             segment: segment,
                             audioPlayer: audioPlayer,
                             settings: settings,
+                            reviewState: reviewState,
                             audioURL: audioURL,
                             onResponse: { response in
                                 handleResponse(for: segment, response: response)
@@ -232,13 +233,16 @@ struct ManageView: View {
                             isSelected: selectedSegments.contains(segment.id),
                             onSelect: {
                                 toggleSelection(for: segment)
+                            },
+                            onTranscriptEdit: { newText in
+                                updateTranscript(for: segment, newText: newText)
                             }
                         )
                         .contextMenu {
                             Button(action: {
-                                var updatedSegment = segment
-                                updatedSegment.isHiddenFromSRS.toggle()
-                                updateSegment(updatedSegment)
+                                if let index = segments.firstIndex(where: { $0.id == segment.id }) {
+                                    segments[index].isHiddenFromSRS.toggle()
+                                }
                             }) {
                                 Label(    
                                     segment.isHiddenFromSRS ? "Show in SRS" : "Hide from SRS",
@@ -456,6 +460,13 @@ struct ManageView: View {
             UserDefaults.standard.synchronize()
         }
         NotificationCenter.default.post(name: .segmentsUpdated, object: nil)
+    }
+    
+    private func updateTranscript(for segment: Segment, newText: String) {
+        if let index = segments.firstIndex(where: { $0.id == segment.id }) {
+            segments[index].updateTranscript(newText)
+            saveState()
+        }
     }
 }
 

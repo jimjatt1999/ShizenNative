@@ -4,15 +4,19 @@ struct ReviewCardView: View {
     let segment: Segment
     @ObservedObject var audioPlayer: AudioPlayer
     @ObservedObject var settings: AppSettings
+    @ObservedObject var reviewState: ReviewState
     let audioURL: URL
     let onResponse: ((String) -> Void)?
     let isCompact: Bool
     let showControls: Bool
     let isSelected: Bool
     let onSelect: (() -> Void)?
+    var onTranscriptEdit: ((String) -> Void)?
     
     @State private var showTranscript: Bool
     @State private var showLanguageAnalysis = false
+    @State private var isEditing = false
+    @State private var editedText: String = ""
     
     var isPlaying: Bool {
         audioPlayer.isPlaying && audioPlayer.currentSegmentId == segment.id.uuidString
@@ -21,21 +25,25 @@ struct ReviewCardView: View {
     init(segment: Segment, 
          audioPlayer: AudioPlayer, 
          settings: AppSettings, 
+         reviewState: ReviewState,
          audioURL: URL,
          onResponse: ((String) -> Void)? = nil, 
          isCompact: Bool = false, 
          showControls: Bool = true,
          isSelected: Bool = false,
-         onSelect: (() -> Void)? = nil) {
+         onSelect: (() -> Void)? = nil,
+         onTranscriptEdit: ((String) -> Void)? = nil) {
         self.segment = segment
         self.audioPlayer = audioPlayer
         self.settings = settings
+        self.reviewState = reviewState
         self.audioURL = audioURL
         self.onResponse = onResponse
         self.isCompact = isCompact
         self.showControls = showControls
         self.isSelected = isSelected
         self.onSelect = onSelect
+        self.onTranscriptEdit = onTranscriptEdit
         _showTranscript = State(initialValue: settings.settings.showTranscriptsByDefault)
     }
     
@@ -52,6 +60,23 @@ struct ReviewCardView: View {
                         .buttonStyle(PlainButtonStyle())
                     }
                     
+                    // Add status text
+                    let segmentId = segment.id.uuidString
+                    let status: ReviewStatus = {
+                        if let card = reviewState.reviewCards[segmentId] {
+                            if card.dueDate <= Date() {
+                                return .due
+                            } else {
+                                return .scheduled(date: card.dueDate)
+                            }
+                        }
+                        return .new
+                    }()
+                    
+                    Text(status.text)
+                        .font(.caption)
+                        .foregroundColor(status.color)
+                    
                     Spacer()
                     
                     Text(timeString(start: segment.start, end: segment.end))
@@ -61,9 +86,16 @@ struct ReviewCardView: View {
                 .padding(.horizontal, isCompact ? 12 : 16)
                 .padding(.top, isCompact ? 8 : 12)
                 
-                // Text content
+                // Text content with editing
                 HStack {
-                    if showTranscript {
+                    if isEditing {
+                        TextEditor(text: $editedText)
+                            .font(.system(size: isCompact ? 14 : 16))
+                            .frame(height: 100)
+                            .padding(4)
+                            .background(Color(.textBackgroundColor))
+                            .cornerRadius(6)
+                    } else if showTranscript {
                         Text(segment.text)
                             .font(.system(size: isCompact ? 14 : 16))
                             .transition(.opacity)
@@ -76,7 +108,24 @@ struct ReviewCardView: View {
                     
                     Spacer()
                     
-                    HStack(spacing: 12) {
+                    VStack(spacing: 12) {
+                        if showTranscript {
+                            Button(action: {
+                                if isEditing {
+                                    onTranscriptEdit?(editedText)
+                                }
+                                withAnimation {
+                                    isEditing.toggle()
+                                    if isEditing {
+                                        editedText = segment.text
+                                    }
+                                }
+                            }) {
+                                Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                        
                         Button(action: {
                             withAnimation {
                                 showLanguageAnalysis.toggle()

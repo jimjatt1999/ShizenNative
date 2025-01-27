@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct UploadPromptView: View {
     @Binding var showingFilePicker: Bool
@@ -52,5 +53,32 @@ struct UploadPromptView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
+        .onDrop(
+            of: [UTType.audio],
+            delegate: AudioDropDelegate(isDragging: $isDragging, showingFilePicker: $showingFilePicker)
+        )
+    }
+}
+
+struct AudioDropDelegate: DropDelegate {
+    @Binding var isDragging: Bool
+    @Binding var showingFilePicker: Bool
+    
+    func validateDrop(info: DropInfo) -> Bool {
+        return info.hasItemsConforming(to: [UTType.audio])
+    }
+    
+    func dropEntered(info: DropInfo) {
+        isDragging = true
+    }
+    
+    func dropExited(info: DropInfo) {
+        isDragging = false
+    }
+    
+    func performDrop(info: DropInfo) -> Bool {
+        isDragging = false
+        showingFilePicker = true
+        return true
     }
 }
