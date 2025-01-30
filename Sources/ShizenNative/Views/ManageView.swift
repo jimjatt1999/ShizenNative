@@ -223,7 +223,6 @@ struct ManageView: View {
                             segment: segment,
                             audioPlayer: audioPlayer,
                             settings: settings,
-                            reviewState: reviewState,
                             audioURL: audioURL,
                             onResponse: { response in
                                 handleResponse(for: segment, response: response)
@@ -236,7 +235,8 @@ struct ManageView: View {
                             },
                             onTranscriptEdit: { newText in
                                 updateTranscript(for: segment, newText: newText)
-                            }
+                            },
+                            reviewState: reviewState
                         )
                         .contextMenu {
                             Button(action: {

@@ -91,20 +91,27 @@ struct ReviewCard: View {
     @ObservedObject var reviewState: ReviewState
     let audioURL: URL
     let onResponse: (String) -> Void
+    let onTranscriptEdit: ((String) -> Void)?
     
     @State private var showTranscript: Bool
     @State private var showLanguageAnalysis = false
     @State private var showTranslation = false
     @State private var translatedText: String = ""
     @State private var isTranslating = false
+    @State private var showingNoteEditor = false
+    @State private var showingTranscriptEditor = false
+    @State private var editingText: String = ""
+    @State private var isEditing = false
+    @State private var editedText: String = ""
     
-    init(segment: Segment, audioPlayer: AudioPlayer, settings: AppSettings, reviewState: ReviewState, audioURL: URL, onResponse: @escaping (String) -> Void) {
+    init(segment: Segment, audioPlayer: AudioPlayer, settings: AppSettings, reviewState: ReviewState, audioURL: URL, onResponse: @escaping (String) -> Void, onTranscriptEdit: ((String) -> Void)? = nil) {
         self.segment = segment
         self.audioPlayer = audioPlayer
         self.settings = settings
         self.reviewState = reviewState
         self.audioURL = audioURL
         self.onResponse = onResponse
+        self.onTranscriptEdit = onTranscriptEdit
         _showTranscript = State(initialValue: settings.settings.showTranscriptsByDefault)
     }
     
@@ -207,9 +214,16 @@ struct ReviewCard: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Text content with reveal and language analysis buttons
+            // Text content with editing
             HStack {
-                if showTranscript {
+                if isEditing {
+                    TextEditor(text: $editedText)
+                        .font(.system(size: 16))
+                        .frame(height: 100)
+                        .padding(4)
+                        .background(Color(.textBackgroundColor))
+                        .cornerRadius(6)
+                } else if showTranscript {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(segment.text)
                             .font(.system(size: 18))
@@ -237,7 +251,42 @@ struct ReviewCard: View {
                 
                 Spacer()
                 
-                HStack(spacing: 12) {
+                VStack(spacing: 12) {
+                    if showTranscript {
+                        Button(action: {
+                            if isEditing {
+                                onTranscriptEdit?(editedText)
+                            }
+                            withAnimation {
+                                isEditing.toggle()
+                                if isEditing {
+                                    editedText = segment.text
+                                }
+                            }
+                        }) {
+                            Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    
+                    // Notes Button
+                    Button(action: {
+                        if let existingNote = reviewState.getNote(for: segment.id.uuidString) {
+                            editingText = existingNote.text
+                        } else {
+                            editingText = ""
+                        }
+                        showingNoteEditor = true
+                    }) {
+                        if reviewState.getNote(for: segment.id.uuidString) != nil {
+                            Image(systemName: "note.text.badge.plus")
+                                .foregroundColor(.blue)
+                        } else {
+                            Image(systemName: "note.text")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                    
                     Button(action: {
                         withAnimation {
                             showLanguageAnalysis.toggle()
@@ -356,6 +405,72 @@ struct ReviewCard: View {
         .onDisappear {
             if isPlaying {
                 audioPlayer.stop()
+            }
+        }
+        .sheet(isPresented: $showingNoteEditor) {
+            NavigationView {
+                VStack(spacing: 20) {
+                    TextEditor(text: $editingText)
+                        .frame(height: 200)
+                        .padding(8)
+                        .background(Color(.textBackgroundColor))
+                        .cornerRadius(8)
+                        .overlay(
+                            Group {
+                                if editingText.isEmpty {
+                                    Text("Add study notes, mnemonics, or context...")
+                                        .foregroundColor(.gray)
+                                        .padding(.leading, 12)
+                                        .padding(.top, 12)
+                                }
+                            }
+                        )
+                }
+                .padding()
+                .navigationTitle(reviewState.getNote(for: segment.id.uuidString) != nil ? "Edit Note" : "Add Note")
+                .toolbar {
+                    ToolbarItemGroup(placement: .automatic) {
+                        Button("Cancel") {
+                            showingNoteEditor = false
+                        }
+                        
+                        Button(reviewState.getNote(for: segment.id.uuidString) != nil ? "Update" : "Save") {
+                            if editingText.isEmpty {
+                                reviewState.removeNote(for: segment.id.uuidString)
+                            } else {
+                                let note = UserNote(segmentId: segment.id.uuidString, text: editingText)
+                                reviewState.saveNote(note, for: segment.id.uuidString)
+                            }
+                            showingNoteEditor = false
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingTranscriptEditor) {
+            NavigationView {
+                VStack(spacing: 20) {
+                    TextEditor(text: $editingText)
+                        .frame(height: 200)
+                        .padding(8)
+                        .background(Color(.textBackgroundColor))
+                        .cornerRadius(8)
+                }
+                .padding()
+                .navigationTitle("Edit Transcript")
+                .toolbar {
+                    ToolbarItemGroup(placement: .automatic) {
+                        Button("Cancel") {
+                            showingTranscriptEditor = false
+                        }
+                        
+                        Button("Save") {
+                            // We need to handle transcript updates here
+                            // This will require adding a callback property
+                            showingTranscriptEditor = false
+                        }
+                    }
+                }
             }
         }
     }

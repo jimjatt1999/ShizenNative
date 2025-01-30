@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @StateObject private var audioPlayer = AudioPlayer()
@@ -7,15 +8,16 @@ struct ContentView: View {
     @StateObject private var reviewState: ReviewState
     @State private var showingFilePicker = false
     @State private var segments: [Segment] = []
-    @State private var selectedView: String? = "Review"
+    @State private var selectedView: String? = nil
     @State private var isTranscribing = false
     @State private var transcriptionProgress = ""
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showingFocusModeSelection = false
-    @State private var audioFiles: [String: URL] = [:]
     @State private var showingAudioEditor = false
     @State private var audioToEdit: URL?
+    @State private var audioFiles: [String: URL] = [:]
+    @State private var selectedSourceForFocusMode: String?
     
     init() {
         let appSettings = AppSettings()
@@ -25,6 +27,19 @@ struct ContentView: View {
     
     var sidebarContent: some View {
         List(selection: $selectedView) {
+            NavigationLink(
+                destination: WelcomeView(
+                    segments: segments,
+                    reviewState: reviewState,
+                    selectedView: $selectedView
+                ),
+                tag: "Home",
+                selection: $selectedView
+            ) {
+                Label("Home", systemImage: "house")
+                    .foregroundColor(.white)
+            }
+            
             NavigationLink(
                 destination: ReviewView(
                     segments: segments,
@@ -45,9 +60,7 @@ struct ContentView: View {
                     showingFilePicker: $showingFilePicker,
                     isTranscribing: $isTranscribing,
                     transcriptionProgress: $transcriptionProgress,
-                    onFileSelected: { url, segmentDuration in
-                        handleEditedAudio(url, segmentDuration: segmentDuration)
-                    }
+                    onFileSelected: handleFileSelected
                 ),
                 tag: "Upload",
                 selection: $selectedView
@@ -95,34 +108,53 @@ struct ContentView: View {
     
     var mainContent: some View {
         Group {
-            if selectedView == "Upload" {
-                UploadView(
-                    showingFilePicker: $showingFilePicker,
-                    isTranscribing: $isTranscribing,
-                    transcriptionProgress: $transcriptionProgress,
-                    onFileSelected: { url, segmentDuration in
-                        handleEditedAudio(url, segmentDuration: segmentDuration)
-                    }
-                )
-            } else if selectedView == "Review" {
-                ReviewView(
+            if let selectedView = selectedView {
+                switch selectedView {
+                case "Home":
+                    WelcomeView(
+                        segments: segments,
+                        reviewState: reviewState,
+                        selectedView: $selectedView
+                    )
+                case "Review":
+                    ReviewView(
+                        segments: segments,
+                        audioPlayer: audioPlayer,
+                        settings: settings,
+                        audioFiles: audioFiles,
+                        reviewState: reviewState
+                    )
+                case "Upload":
+                    UploadView(
+                        showingFilePicker: $showingFilePicker,
+                        isTranscribing: $isTranscribing,
+                        transcriptionProgress: $transcriptionProgress,
+                        onFileSelected: handleFileSelected
+                    )
+                case "Manage":
+                    ManageView(
+                        audioPlayer: audioPlayer,
+                        segments: $segments,
+                        audioFiles: $audioFiles,
+                        reviewState: reviewState
+                    )
+                case "Stats":
+                    StatsView(reviewState: reviewState)
+                case "Settings":
+                    SettingsView()
+                default:
+                    WelcomeView(
+                        segments: segments,
+                        reviewState: reviewState,
+                        selectedView: $selectedView
+                    )
+                }
+            } else {
+                WelcomeView(
                     segments: segments,
-                    audioPlayer: audioPlayer,
-                    settings: settings,
-                    audioFiles: audioFiles,
-                    reviewState: reviewState
+                    reviewState: reviewState,
+                    selectedView: $selectedView
                 )
-            } else if selectedView == "Manage" {
-                ManageView(
-                    audioPlayer: audioPlayer,
-                    segments: $segments,
-                    audioFiles: $audioFiles,
-                    reviewState: reviewState
-                )
-            } else if selectedView == "Stats" {
-                StatsView(reviewState: reviewState)
-            } else if selectedView == "Settings" {
-                SettingsView()
             }
         }
     }
@@ -135,7 +167,7 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 600)
         .navigationTitle("Shizen")
         .toolbar {
-            ToolbarItem(placement: .navigation) {
+            ToolbarItemGroup(placement: .navigation) {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.left")
                 }
@@ -152,17 +184,17 @@ struct ContentView: View {
                 }
             }
         }
+
         .sheet(isPresented: $showingAudioEditor) {
-            if let audioURL = audioToEdit {
+            if let url = audioToEdit {
                 AudioEditorView(
-                    audioURL: audioURL,
+                    audioURL: url,
                     initialSegmentDuration: 20.0,
-                    onSave: { url, segmentDuration in
-                        showingAudioEditor = false
-                        handleEditedAudio(url, segmentDuration: segmentDuration)
-                    },
+                    onSave: handleFileSelected,
                     onCancel: {
                         showingAudioEditor = false
+                        audioToEdit = nil
+                        isTranscribing = false
                     }
                 )
             }
@@ -193,65 +225,68 @@ struct ContentView: View {
         NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
     }
     
-    private func handleFileUpload(_ url: URL) {
-        audioToEdit = url
-        showingAudioEditor = true
-    }
-    
-    private func handleFileImport(_ result: Result<[URL], Error>) {
-        do {
-            let files = try result.get()
-            guard let url = files.first else { return }
-            audioToEdit = url
-            showingAudioEditor = true
-        } catch {
-            print("Error during file import: \(error)")
-            errorMessage = error.localizedDescription
-            showError = true
-        }
-    }
-    
-    private func handleEditedAudio(_ url: URL, segmentDuration: Double) {
+    private func handleFileSelected(_ url: URL, segmentDuration: TimeInterval, sourceName: String) {
         Task {
             do {
-                isTranscribing = true
-                transcriptionProgress = "Processing audio..."
-                
-                let sourceId = url.lastPathComponent
+                let sourceId = sourceName
                 audioFiles[sourceId] = url
+                isTranscribing = true
                 
-                audioPlayer.load(url: url)
+                let funnyMessages = [
+                    "Transcribing... hope you brought snacks!",
+                    "Converting speech to text... in Japanese time",
+                    "Working harder than a karaoke machine...",
+                    "Channeling my inner Japanese master...",
+                    "Taking a quick matcha break...",
+                    "Consulting the ancient scrolls of audio...",
+                    "Doing my best Japanese robot impression..."
+                ]
                 
-                transcriptionProgress = "Transcribing..."
+                // Start showing progress messages
+                for message in funnyMessages {
+                    if !isTranscribing { break }
+                    transcriptionProgress = message
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+                
+                // Actual transcription
                 let newSegments = try await transcriptionManager.transcribe(
                     audioPath: url.path,
                     segmentDuration: segmentDuration
                 )
                 
-                await MainActor.run {
-                    print("Received \(newSegments.count) segments")
-                    
-                    let processedSegments = newSegments.map { segment in
-                        var segment = segment
-                        segment.sourceId = sourceId
-                        return segment
-                    }
-                    
+                // Process segments
+                let processedSegments = newSegments.map { segment in
+                    var segment = segment
+                    segment.sourceId = sourceId
+                    return segment
+                }
+                
+                DispatchQueue.main.async {
                     segments.append(contentsOf: processedSegments)
                     saveState(segments: segments, audioFiles: audioFiles)
-                    
+                    showingAudioEditor = false
+                    showingFilePicker = false
                     isTranscribing = false
-                    selectedView = "Review"
+                    audioToEdit = nil
+                    selectedView = "Review" // Automatically switch to Review view
                 }
             } catch {
-                print("Error during transcription: \(error)")
-                await MainActor.run {
-                    isTranscribing = false
+                DispatchQueue.main.async {
                     errorMessage = error.localizedDescription
                     showError = true
+                    showingAudioEditor = false
+                    showingFilePicker = false
+                    isTranscribing = false
+                    audioToEdit = nil
                 }
             }
         }
+    }
+    
+    private func showFocusMode(for sourceId: String) {
+        selectedSourceForFocusMode = sourceId
+        showingFocusModeSelection = true
     }
     
     private func loadSavedState() {

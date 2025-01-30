@@ -17,6 +17,8 @@ struct TranscribingView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 300)
+                .animation(.easeInOut, value: progress)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -4,7 +4,7 @@ import Speech
 
 struct AudioEditorView: View {
     let audioURL: URL
-    let onSave: (URL, Double) -> Void
+    let onSave: (URL, Double, String) -> Void
     let onCancel: () -> Void
     
     @State private var audioPlayer: AVAudioPlayer?
@@ -24,7 +24,7 @@ struct AudioEditorView: View {
     
     private let timer = Timer.publish(every: 0.03, on: .main, in: .common).autoconnect()
     
-    init(audioURL: URL, initialSegmentDuration: Double, onSave: @escaping (URL, Double) -> Void, onCancel: @escaping () -> Void) {
+    init(audioURL: URL, initialSegmentDuration: Double, onSave: @escaping (URL, Double, String) -> Void, onCancel: @escaping () -> Void) {
         self.audioURL = audioURL
         self.onSave = onSave
         self.onCancel = onCancel
@@ -246,36 +246,26 @@ struct AudioEditorView: View {
         
         DispatchQueue.global(qos: .userInitiated).async {
             if let trimmedURL = trimAudio() {
-                // Always use the new name if provided, otherwise use the original name
                 let finalURL: URL
                 let directory = trimmedURL.deletingLastPathComponent()
                 let fileExtension = trimmedURL.pathExtension
                 
+                // Use the new filename if provided, otherwise use the original name without extension
+                let sourceName: String
                 if !newFileName.isEmpty {
-                    // Generate a unique filename
-                    var counter = 1
-                    var uniqueName = newFileName
-                    var uniqueURL = directory.appendingPathComponent("\(uniqueName).\(fileExtension)")
-                    
-                    // Keep incrementing until we find a unique name
-                    while FileManager.default.fileExists(atPath: uniqueURL.path) {
-                        uniqueName = "\(newFileName) \(counter)"
-                        uniqueURL = directory.appendingPathComponent("\(uniqueName).\(fileExtension)")
-                        counter += 1
-                    }
-                    
-                    finalURL = uniqueURL
+                    sourceName = newFileName
                 } else {
-                    // Use the original filename if no new name was provided
-                    let originalName = audioURL.lastPathComponent
-                    finalURL = directory.appendingPathComponent(originalName)
+                    sourceName = audioURL.deletingPathExtension().lastPathComponent
+                        .replacingOccurrences(of: "trimmed_", with: "")
                 }
+                
+                finalURL = directory.appendingPathComponent("\(sourceName).\(fileExtension)")
                 
                 do {
                     try FileManager.default.moveItem(at: trimmedURL, to: finalURL)
                     DispatchQueue.main.async {
                         isSaving = false
-                        onSave(finalURL, segmentDuration)
+                        onSave(finalURL, segmentDuration, sourceName)
                     }
                 } catch {
                     DispatchQueue.main.async {
@@ -444,7 +434,7 @@ struct AudioEditorView_Previews: PreviewProvider {
         AudioEditorView(
             audioURL: URL(fileURLWithPath: ""),
             initialSegmentDuration: 30,
-            onSave: { _, _ in },
+            onSave: { _, _, _ in },
             onCancel: {}
         )
     }

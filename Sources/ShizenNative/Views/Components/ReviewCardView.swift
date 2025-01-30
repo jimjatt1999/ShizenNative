@@ -4,19 +4,24 @@ struct ReviewCardView: View {
     let segment: Segment
     @ObservedObject var audioPlayer: AudioPlayer
     @ObservedObject var settings: AppSettings
-    @ObservedObject var reviewState: ReviewState
     let audioURL: URL
     let onResponse: ((String) -> Void)?
     let isCompact: Bool
     let showControls: Bool
     let isSelected: Bool
     let onSelect: (() -> Void)?
-    var onTranscriptEdit: ((String) -> Void)?
+    let onTranscriptEdit: ((String) -> Void)?
+    @ObservedObject var reviewState: ReviewState
     
     @State private var showTranscript: Bool
     @State private var showLanguageAnalysis = false
     @State private var isEditing = false
     @State private var editedText: String = ""
+    @State private var showingNotes = false
+    @State private var noteText: String = ""
+    @State private var showingNoteEditor = false
+    @State private var showingTranscriptEditor = false
+    @State private var editingText: String = ""
     
     var isPlaying: Bool {
         audioPlayer.isPlaying && audioPlayer.currentSegmentId == segment.id.uuidString
@@ -25,18 +30,17 @@ struct ReviewCardView: View {
     init(segment: Segment, 
          audioPlayer: AudioPlayer, 
          settings: AppSettings, 
-         reviewState: ReviewState,
          audioURL: URL,
          onResponse: ((String) -> Void)? = nil, 
          isCompact: Bool = false, 
          showControls: Bool = true,
          isSelected: Bool = false,
          onSelect: (() -> Void)? = nil,
-         onTranscriptEdit: ((String) -> Void)? = nil) {
+         onTranscriptEdit: ((String) -> Void)? = nil,
+         reviewState: ReviewState) {
         self.segment = segment
         self.audioPlayer = audioPlayer
         self.settings = settings
-        self.reviewState = reviewState
         self.audioURL = audioURL
         self.onResponse = onResponse
         self.isCompact = isCompact
@@ -44,47 +48,28 @@ struct ReviewCardView: View {
         self.isSelected = isSelected
         self.onSelect = onSelect
         self.onTranscriptEdit = onTranscriptEdit
+        self.reviewState = reviewState
         _showTranscript = State(initialValue: settings.settings.showTranscriptsByDefault)
     }
     
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: isCompact ? 4 : 8) {
-                // Header with selection and duration
-                HStack {
-                    if let onSelect = onSelect {
+                // Header with selection button
+                if let onSelect = onSelect {
+                    HStack {
                         Button(action: onSelect) {
                             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                                 .foregroundColor(.blue)
+                                .font(.system(size: 18))
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .padding(.top, 8)  // Add some space from top edge
+                        .padding(.leading, 12)  // Add some space from left edge
+                        
+                        Spacer()
                     }
-                    
-                    // Add status text
-                    let segmentId = segment.id.uuidString
-                    let status: ReviewStatus = {
-                        if let card = reviewState.reviewCards[segmentId] {
-                            if card.dueDate <= Date() {
-                                return .due
-                            } else {
-                                return .scheduled(date: card.dueDate)
-                            }
-                        }
-                        return .new
-                    }()
-                    
-                    Text(status.text)
-                        .font(.caption)
-                        .foregroundColor(status.color)
-                    
-                    Spacer()
-                    
-                    Text(timeString(start: segment.start, end: segment.end))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, isCompact ? 12 : 16)
-                .padding(.top, isCompact ? 8 : 12)
                 
                 // Text content with editing
                 HStack {
@@ -109,21 +94,27 @@ struct ReviewCardView: View {
                     Spacer()
                     
                     VStack(spacing: 12) {
-                        if showTranscript {
-                            Button(action: {
-                                if isEditing {
-                                    onTranscriptEdit?(editedText)
-                                }
-                                withAnimation {
-                                    isEditing.toggle()
-                                    if isEditing {
-                                        editedText = segment.text
-                                    }
-                                }
-                            }) {
-                                Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil")
-                                    .foregroundColor(.blue)
+                        Button(action: {
+                            if isEditing {
+                                onTranscriptEdit?(editedText)
                             }
+                            withAnimation {
+                                isEditing.toggle()
+                                if isEditing {
+                                    editedText = segment.text
+                                }
+                            }
+                        }) {
+                            Image(systemName: isEditing ? "checkmark.circle.fill" : "pencil")
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Button(action: {
+                            editingText = reviewState.userNotes[segment.id.uuidString]?.text ?? ""
+                            showingNoteEditor = true
+                        }) {
+                            Image(systemName: "note.text")
+                                .foregroundColor(.blue)
                         }
                         
                         Button(action: {
@@ -206,6 +197,73 @@ struct ReviewCardView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(isSelected ? Color.blue : Color.gray.opacity(0.2), lineWidth: 1)
         )
+        .sheet(isPresented: $showingNoteEditor) {
+            NavigationView {
+                VStack(spacing: 20) {
+                    TextEditor(text: $editingText)
+                        .frame(height: 200)
+                        .padding(8)
+                        .background(Color(.textBackgroundColor))
+                        .cornerRadius(8)
+                        .overlay(
+                            Group {
+                                if editingText.isEmpty {
+                                    Text("Add study notes, mnemonics, or context...")
+                                        .foregroundColor(.gray)
+                                        .padding(.leading, 12)
+                                        .padding(.top, 12)
+                                }
+                            }
+                        )
+                }
+                .padding()
+                .navigationTitle("Card Notes")
+                .toolbar {
+                    ToolbarItemGroup(placement: .automatic) {
+                        Button("Cancel") {
+                            showingNoteEditor = false
+                        }
+                        
+                        Button("Save") {
+                            if editingText.isEmpty {
+                                reviewState.removeNote(for: segment.id.uuidString)
+                            } else {
+                                let note = UserNote(segmentId: segment.id.uuidString, text: editingText)
+                                reviewState.saveNote(note, for: segment.id.uuidString)
+                            }
+                            showingNoteEditor = false
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingTranscriptEditor) {
+            NavigationView {
+                VStack(spacing: 20) {
+                    TextEditor(text: $editingText)
+                        .frame(height: 200)
+                        .padding(8)
+                        .background(Color(.textBackgroundColor))
+                        .cornerRadius(8)
+                }
+                .padding()
+                .navigationTitle("Edit Transcript")
+                .toolbar {
+                    ToolbarItemGroup(placement: .automatic) {
+                        Button("Cancel") {
+                            showingTranscriptEditor = false
+                        }
+                        
+                        Button("Save") {
+                            if let onTranscriptEdit = onTranscriptEdit {
+                                onTranscriptEdit(editingText)
+                            }
+                            showingTranscriptEditor = false
+                        }
+                    }
+                }
+            }
+        }
     }
     
     private func handlePlayback() {

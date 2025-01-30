@@ -9,6 +9,8 @@ struct ReviewView: View {
     @State private var refreshID = UUID()
     @State private var forceReload = false
     @State private var sessionStartTime: Date?
+    @State private var focusModeEnabled = false
+    @State private var showAllTranscripts = false
     
     var reviewStats: (newCards: Int, dueReviews: Int) {
         var newCount = 0
@@ -67,46 +69,43 @@ struct ReviewView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Progress header
+            // Top Navigation Bar
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Session Progress")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    Text(progressText)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Text("Shizen")
+                    .font(.headline)
                 
                 Spacer()
                 
-                HStack(spacing: 15) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("New Cards Today")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Label("\(reviewState.todayNewCards)/\(settings.settings.newCardsPerDay)", 
-                              systemImage: "star.fill")
-                            .font(.caption)
+                // Stats
+                HStack(spacing: 16) {
+                    // New Cards
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
                             .foregroundColor(.blue)
+                        Text("\(reviewState.todayNewCards)/\(settings.settings.newCardsPerDay)")
                     }
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Cards Remaining")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        HStack(spacing: 4) {
-                            Label("\(reviewStats.dueReviews)", systemImage: "clock.fill")
-                                .foregroundColor(.orange)
-                            Text("+")
-                            Label("\(reviewStats.newCards)", systemImage: "star.fill")
-                                .foregroundColor(.blue)
-                        }
-                        .font(.caption)
+                    // Due Cards
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.fill")
+                            .foregroundColor(.orange)
+                        Text("\(reviewStats.dueReviews)")
                     }
                 }
+                .foregroundColor(.secondary)
+                
+                Button(action: { 
+                    showAllTranscripts.toggle()
+                    settings.settings.showTranscriptsByDefault = showAllTranscripts
+                    settings.save()
+                }) {
+                    Image(systemName: showAllTranscripts ? "eye" : "eye.slash")
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(.plain)
             }
             .padding()
+            .background(Color(.windowBackgroundColor))
             
             if visibleSegments.isEmpty {
                 EmptyStateView()
@@ -201,6 +200,10 @@ struct ReviewView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             refreshView()
         }
+    }
+    
+    private func toggleFocusMode() {
+        focusModeEnabled.toggle()
     }
 }
 

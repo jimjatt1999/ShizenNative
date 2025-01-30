@@ -4,7 +4,7 @@ struct UploadView: View {
    @Binding var showingFilePicker: Bool
    @Binding var isTranscribing: Bool
    @Binding var transcriptionProgress: String
-   var onFileSelected: (URL, Double) -> Void
+   var onFileSelected: (URL, Double, String) -> Void
    
    @State private var selectedSource: AudioSourceType = .fileUpload
    @State private var isDragging = false
@@ -13,7 +13,6 @@ struct UploadView: View {
    @State private var showError = false
    @State private var errorMessage = ""
    
-   // Split source selector into separate view
    private var sourceSelector: some View {
        Picker("Source", selection: $selectedSource) {
            ForEach(AudioSourceType.allCases, id: \.self) { source in
@@ -25,7 +24,6 @@ struct UploadView: View {
        .padding()
    }
    
-   // Split content view based on state
    private var contentView: some View {
        Group {
            if isTranscribing {
@@ -49,14 +47,54 @@ struct UploadView: View {
        }
    }
    
-   // Split source-specific content
    private var sourceContent: some View {
        Group {
            switch selectedSource {
            case .fileUpload:
-               UploadPromptView(
-                   showingFilePicker: $showingFilePicker,
-                   isDragging: $isDragging
+               VStack(spacing: 20) {
+                   Image(systemName: "doc.badge.plus")
+                       .resizable()
+                       .scaledToFit()
+                       .frame(width: 60)
+                       .foregroundColor(.blue)
+                   
+                   Text("Drag and drop audio files here")
+                       .font(.headline)
+                       .foregroundColor(.secondary)
+                   
+                   Text("or")
+                       .font(.subheadline)
+                       .foregroundColor(.secondary)
+                   
+                   Button(action: {
+                       showingFilePicker = true
+                   }) {
+                       Text("Choose File")
+                           .font(.headline)
+                           .padding(.horizontal, 20)
+                           .padding(.vertical, 10)
+                           .background(Color.blue)
+                           .foregroundColor(.white)
+                           .cornerRadius(8)
+                   }
+                   .buttonStyle(PlainButtonStyle())
+                   
+                   Text("Supported: MP3, WAV, M4A")
+                       .font(.caption)
+                       .foregroundColor(.secondary)
+               }
+               .padding(40)
+               .background(
+                   RoundedRectangle(cornerRadius: 12)
+                       .stroke(
+                           isDragging ? Color.blue : Color.gray.opacity(0.3),
+                           style: StrokeStyle(lineWidth: 2, dash: [6])
+                       )
+               )
+               .padding(.horizontal, 40)
+               .onDrop(
+                   of: [.audio],
+                   delegate: AudioDropDelegate(isDragging: $isDragging, showingFilePicker: $showingFilePicker)
                )
            case .recording:
                RecordingView { url in
@@ -87,10 +125,10 @@ struct UploadView: View {
                AudioEditorView(
                    audioURL: audioURL,
                    initialSegmentDuration: 20.0,
-                   onSave: { editedURL, segmentDuration in
+                   onSave: { editedURL, segmentDuration, sourceName in
                        print("Audio edited and saved: \(editedURL)")
                        showingAudioEditor = false
-                       onFileSelected(editedURL, segmentDuration)
+                       onFileSelected(editedURL, segmentDuration, sourceName)
                    },
                    onCancel: {
                        print("Audio editing cancelled")
@@ -154,11 +192,34 @@ struct UploadView: View {
    }
 }
 
+struct AudioDropDelegate: DropDelegate {
+    @Binding var isDragging: Bool
+    @Binding var showingFilePicker: Bool
+    
+    func validateDrop(info: DropInfo) -> Bool {
+        return info.hasItemsConforming(to: [.audio])
+    }
+    
+    func dropEntered(info: DropInfo) {
+        isDragging = true
+    }
+    
+    func dropExited(info: DropInfo) {
+        isDragging = false
+    }
+    
+    func performDrop(info: DropInfo) -> Bool {
+        isDragging = false
+        showingFilePicker = true
+        return true
+    }
+}
+
 #Preview {
    UploadView(
        showingFilePicker: .constant(false),
        isTranscribing: .constant(false),
        transcriptionProgress: .constant(""),
-       onFileSelected: { _, _ in }
+       onFileSelected: { _, _, _ in }
    )
 }
